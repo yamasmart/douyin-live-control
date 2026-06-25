@@ -1,0 +1,64 @@
+{
+  "name": "douyin-live-control",
+  "productName": "抖音直播中控群控",
+  "version": "0.0.1",
+  "description": "抖音直播中控群控 — Electron 桌面应用 + 内置浏览器，对抖音巨量百应直播中控台做定时讲解/快捷评论/福袋/公屏AI回复。装上即用，无外部依赖。",
+  "private": true,
+  "author": "Shane",
+  "copyright": "Copyright © 2026 抖音直播中控群控. 保留所有权利。",
+  "main": "dist/main/main.js",
+  "scripts": {
+    "build:main": "esbuild src/main/main.ts --bundle --platform=node --target=node20 --format=cjs --external:electron --external:playwright-core --outfile=dist/main/main.js --sourcemap",
+    "build:preload": "esbuild src/preload/preload.ts --bundle --platform=node --target=node20 --format=cjs --external:electron --outfile=dist/preload/preload.js --sourcemap",
+    "build:renderer": "esbuild src/renderer/renderer.ts --bundle --platform=browser --target=es2020 --format=iife --outfile=dist/renderer/renderer.js --sourcemap && node scripts/copy-renderer-assets.mjs",
+    "build": "npm run build:main && npm run build:preload && npm run build:renderer",
+    "typecheck": "tsc --noEmit",
+    "start": "npm run build && electron .",
+    "dev": "npm run build && electron . --inspect",
+    "pack:mac": "npm run build && node scripts/pack-mac.mjs",
+    "dist": "npm run build && electron-builder",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:win": "npm run build && electron-builder --win"
+  },
+  "build": {
+    "appId": "com.shane.douyinlivecontrol",
+    "productName": "抖音直播中控群控",
+    "copyright": "Copyright © 2026 抖音直播中控群控. 保留所有权利。",
+    "directories": {
+      "output": "out"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "mac": {
+      "target": [
+        { "target": "dmg", "arch": ["arm64", "x64"] },
+        { "target": "zip", "arch": ["arm64", "x64"] }
+      ],
+      "category": "public.app-category.business"
+    },
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.7.0"
+  },
+  "dependencies": {
+    "playwright-core": "^1.49.0"
+  }
+}

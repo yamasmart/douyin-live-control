@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' https: data:; style-src 'self' 'unsafe-inline'; img-src https: data:" />
+    <title>扫码登录</title>
+    <style>
+      body {
+        margin: 0; height: 100vh; display: flex; flex-direction: column;
+        align-items: center; justify-content: center; gap: 16px;
+        background: #171a21; color: #e6e8ec;
+        font-family: -apple-system, "PingFang SC", system-ui, sans-serif;
+      }
+      h3 { margin: 0; font-size: 15px; font-weight: 600; }
+      .qrbox {
+        width: 240px; height: 240px; background: #fff; border-radius: 10px;
+        display: flex; align-items: center; justify-content: center; overflow: hidden;
+      }
+      #qr { width: 230px; height: 230px; object-fit: contain; display: none; }
+      #msg { color: #8b919e; font-size: 13px; }
+    </style>
+  </head>
+  <body>
+    <h3>抖音 App 扫码登录</h3>
+    <div class="qrbox"><img id="qr" alt="二维码" /></div>
+    <div id="msg">二维码加载中…</div>
+    <script>
+      window.__setQr = (u) => {
+        const img = document.getElementById('qr');
+        img.src = u;
+        img.style.display = 'block';
+        document.getElementById('msg').textContent = '请用抖音 App 扫码登录';
+      };
+      window.__setMsg = (m) => {
+        document.getElementById('msg').textContent = m;
+      };
+    </script>
+  </body>
+</html>
