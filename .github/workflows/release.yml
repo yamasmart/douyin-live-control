@@ -1,0 +1,32 @@
+name: Release
+
+# 云端打包：在 GitHub 的 Windows / Mac 机器上各自用 electron-builder 打包，
+# 自动发布到对应版本的 GitHub Release（无需本机有 Windows、无需本地下载运行时）。
+on:
+  workflow_dispatch: # 仓库 Actions 页可手动「Run workflow」
+  push:
+    tags: ['v*'] # 推 v* 标签也会自动触发
+
+permissions:
+  contents: write # 让内置令牌能创建 Release、上传安装包
+
+jobs:
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run build
+      - name: 打包并发布到 Release
+        run: npx --no-install electron-builder --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 不去找 Mac 开发者证书（无证书时做未签名构建，避免 CI 失败）
+          CSC_IDENTITY_AUTO_DISCOVERY: false
