@@ -29,6 +29,7 @@
     "directories": {
       "output": "out"
     },
+    "artifactName": "${name}-${version}-${arch}.${ext}",
     "files": [
       "dist/**/*",
       "package.json"
@@ -50,7 +51,8 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "perMachine": false
+      "perMachine": false,
+      "artifactName": "${name}-setup-${version}.${ext}"
     }
   },
   "devDependencies": {
