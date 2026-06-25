@@ -4,6 +4,7 @@
   "version": "0.0.1",
   "description": "抖音直播中控群控 — Electron 桌面应用 + 内置浏览器，对抖音巨量百应直播中控台做定时讲解/快捷评论/福袋/公屏AI回复。装上即用，无外部依赖。",
   "private": true,
+  "license": "MIT",
   "author": "Shane",
   "copyright": "Copyright © 2026 抖音直播中控群控. 保留所有权利。",
   "main": "dist/main/main.js",
