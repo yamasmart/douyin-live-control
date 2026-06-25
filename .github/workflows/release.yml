@@ -1,17 +1,18 @@
 name: Release
 
-# 云端打包：在 GitHub 的 Windows / Mac 机器上各自用 electron-builder 打包，
-# 自动发布到对应版本的 GitHub Release（无需本机有 Windows、无需本地下载运行时）。
+# 云端打包：Windows / Mac 各自用 electron-builder 打包（只构建不发布），
+# 产物上传为 workflow artifact，最后由单独的 publish 作业统一发到一个 GitHub Release。
+# 这样避免多平台作业并发各建一个草稿 Release 的竞争问题。
 on:
-  workflow_dispatch: # 仓库 Actions 页可手动「Run workflow」
+  workflow_dispatch:
   push:
-    tags: ['v*'] # 推 v* 标签也会自动触发
+    tags: ['v*']
 
 permissions:
-  contents: write # 让内置令牌能创建 Release、上传安装包
+  contents: write
 
 jobs:
-  release:
+  build:
     strategy:
       fail-fast: false
       matrix:
@@ -24,9 +25,32 @@ jobs:
           node-version: 20
       - run: npm ci
       - run: npm run build
-      - name: 打包并发布到 Release
-        run: npx --no-install electron-builder --publish always
+      - name: 打包（不发布）
+        run: npx --no-install electron-builder --publish never
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # 不去找 Mac 开发者证书（无证书时做未签名构建，避免 CI 失败）
-          CSC_IDENTITY_AUTO_DISCOVERY: false
+          CSC_IDENTITY_AUTO_DISCOVERY: false # 无 Mac 证书时做未签名构建，避免 CI 失败
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.os }}
+          path: |
+            out/*.exe
+            out/*.dmg
+          if-no-files-found: warn
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: ver
+        run: echo "v=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: 发布到一个 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.ver.outputs.v }}
+          name: v${{ steps.ver.outputs.v }}
+          files: artifacts/*
