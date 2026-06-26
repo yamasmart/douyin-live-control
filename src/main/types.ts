@@ -97,6 +97,7 @@ export type LogType =
   | 'fuwu'
   | 'offline'
   | 'login'
+  | 'guard'
   | 'error';
 
 export interface LogEvent {

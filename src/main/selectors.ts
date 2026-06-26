@@ -71,6 +71,11 @@ export const Selectors = {
   fuwuDrawerClose: '.buyin-drawer-close',
   fuwuDrawerMask: '.buyin-drawer-mask',
 
+  // —— 防挂机/账号安全保护弹窗：长时间无"真人操作"时弹出（"检测到您长时间未操作…"），
+  //    role=dialog 会拦截所有点击导致讲解/评论点不动；检测到就点「恢复」继续。
+  idleGuardText: '长时间未操作',
+  idleGuardResumeButton: '恢复',
+
   // —— 弹窗（违规/通知）安全关闭：只点这些“知悉/忽略”类文案，绝不点执行类按钮 ——
   popupDismissTexts: ['我知道了', '知道了', '我已知悉', '忽略', '稍后处理'] as string[],
   // —— 福袋发布可能的二次确认 ——

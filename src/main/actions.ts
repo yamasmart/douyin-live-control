@@ -86,6 +86,33 @@ export async function extractQrDataUrl(page: Page): Promise<string> {
   return '';
 }
 
+/**
+ * 防挂机/账号安全保护弹窗（"检测到您长时间未操作，系统已自动唤起保护机制"）：
+ * 该 role=dialog 会拦截全页点击，导致讲解/评论点不动 30s 超时。检测到就点「恢复」解锁。
+ * 返回是否点了（供上层记日志）。点「恢复」是安全动作（仅恢复会话，不做任何业务操作）。
+ */
+export async function dismissIdleGuard(page: Page): Promise<boolean> {
+  try {
+    const modal = page
+      .locator('.auxo-modal-wrap, [role="dialog"]')
+      .filter({ hasText: Selectors.idleGuardText });
+    if (await modal.count()) {
+      const resume = modal.getByRole('button', {
+        name: Selectors.idleGuardResumeButton,
+        exact: true,
+      });
+      if (await resume.count()) {
+        await resume.first().click().catch(() => {});
+        await page.waitForTimeout(400);
+        return true;
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return false;
+}
+
 const VIRTUAL_SCROLL_PX = 1200;
 
 /**
@@ -94,6 +121,7 @@ const VIRTUAL_SCROLL_PX = 1200;
  * 才能区分「讲解」vs「取消讲解」vs「下架」。
  */
 export async function clickExplain(page: Page, seq: number): Promise<void> {
+  await dismissIdleGuard(page); // 先解掉可能挡住点击的防挂机弹窗
   const rows = page.locator(Selectors.productRow);
   let count = await rows.count();
 
@@ -128,6 +156,7 @@ export async function clickExplain(page: Page, seq: number): Promise<void> {
 export async function sendComment(page: Page, text: string): Promise<void> {
   const t = text.trim();
   if (!t) return;
+  await dismissIdleGuard(page); // 先解掉可能挡住点击的防挂机弹窗
   const box = page.getByPlaceholder(Selectors.commentPlaceholder);
   await box.click();
   await box.fill(t);

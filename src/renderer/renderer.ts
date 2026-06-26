@@ -509,6 +509,7 @@ const LOG_META: Record<string, { label: string; cls: string }> = {
   fuwu: { label: '福袋', cls: 'magenta' },
   offline: { label: '下播', cls: 'orange' },
   login: { label: '登录', cls: 'green' },
+  guard: { label: '恢复', cls: 'orange' },
   error: { label: '异常', cls: 'red' },
 };
 

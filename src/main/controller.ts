@@ -16,6 +16,7 @@ import {
   isLive,
   isLoggedIn,
   dismissPopups,
+  dismissIdleGuard,
 } from './actions';
 
 /** 连续多少次检测到非直播态判定为下播（每 12s 一次 => 36s）。镜像 OMS。 */
@@ -220,6 +221,10 @@ export class LiveController {
     this.detect = setInterval(async () => {
       if (!this.session) return;
       try {
+        // 防挂机弹窗会拦截一切点击，优先解掉并记一条日志。
+        if (await dismissIdleGuard(this.session.page).catch(() => false)) {
+          this.log('guard', '检测到防挂机弹窗，已自动点「恢复」');
+        }
         await dismissPopups(this.session.page).catch(() => {});
         if (await isLive(this.session.page)) {
           this.nonLiveStreak = 0;
