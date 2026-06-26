@@ -1,7 +1,7 @@
 {
   "name": "douyin-live-control",
   "productName": "抖音直播中控群控",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "抖音直播中控群控 — Electron 桌面应用 + 内置浏览器，对抖音巨量百应直播中控台做定时讲解/快捷评论/福袋/公屏AI回复。装上即用，无外部依赖。",
   "private": true,
   "license": "MIT",
@@ -79,7 +79,8 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "perMachine": false,
-      "artifactName": "${name}-setup-${version}.${ext}"
+      "artifactName": "${name}-setup-${version}.${ext}",
+      "differentialPackage": false
     }
   },
   "devDependencies": {

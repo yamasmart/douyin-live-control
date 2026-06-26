@@ -46,9 +46,47 @@ function setupAutoUpdate(): void {
   );
 }
 
+/** 简单 semver 比较：a 是否比 b 新（只看 x.y.z）。 */
+function isNewer(a: string, b: string): boolean {
+  const pa = a.split('.').map((n) => parseInt(n, 10) || 0);
+  const pb = b.split('.').map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0);
+  }
+  return false;
+}
+
+/**
+ * macOS 更新检查：直接问 GitHub API 拿最新 release 版本号，比当前新就提示去下载页。
+ * 不依赖 electron-updater 的 latest-mac.yml / zip（未签名本就不能静默更新），Release 因此更干净。
+ */
+async function checkMacUpdate(manual: boolean): Promise<void> {
+  try {
+    const res = await fetch(
+      'https://api.github.com/repos/yamasmart/douyin-live-control/releases/latest',
+      { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'douyin-live-control' } },
+    );
+    if (!res.ok) return;
+    const data = (await res.json()) as { tag_name?: string; html_url?: string };
+    const latest = String(data.tag_name ?? '').replace(/^v/, '');
+    if (latest && isNewer(latest, app.getVersion())) {
+      sendUpdate({ state: 'manual', version: latest, url: data.html_url || RELEASES_URL });
+    } else if (manual) {
+      sendUpdate({ state: 'none' });
+    }
+  } catch {
+    /* 网络问题静默忽略 */
+  }
+}
+
 async function checkForUpdates(manual = false): Promise<void> {
   if (!app.isPackaged) {
     if (manual) sendUpdate({ state: 'none', dev: true });
+    return;
+  }
+  // macOS 未签名无法静默更新 → 走 API 查版本号提示；Windows 用 electron-updater 静默下载安装。
+  if (process.platform === 'darwin') {
+    await checkMacUpdate(manual);
     return;
   }
   try {
