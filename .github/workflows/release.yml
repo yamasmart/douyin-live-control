@@ -32,9 +32,13 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: installers-${{ matrix.os }}
+          # 安装包 + 自动更新元数据（latest*.yml / blockmap / mac zip，electron-updater 需要）
           path: |
             out/*.exe
             out/*.dmg
+            out/*.zip
+            out/*.yml
+            out/*.blockmap
           if-no-files-found: warn
 
   publish:

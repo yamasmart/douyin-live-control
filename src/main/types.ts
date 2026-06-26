@@ -87,3 +87,21 @@ export interface ProfileStatus {
 export interface AppConfig {
   profiles: Profile[];
 }
+
+/** 运行日志事件类型（镜像 OMS live_control_events）。 */
+export type LogType =
+  | 'start'
+  | 'stop'
+  | 'explain'
+  | 'comment'
+  | 'fuwu'
+  | 'offline'
+  | 'login'
+  | 'error';
+
+export interface LogEvent {
+  profileId: string;
+  ts: number;
+  type: LogType;
+  detail: string;
+}

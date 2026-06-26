@@ -2,7 +2,7 @@
 
 import { contextBridge, ipcRenderer } from 'electron';
 import { IPC } from '../main/ipc-channels';
-import type { AppConfig, Profile, ProfileStatus, LoginInfo } from '../main/types';
+import type { AppConfig, Profile, ProfileStatus, LoginInfo, LogEvent } from '../main/types';
 
 const api = {
   appInfo: (): Promise<{ name: string; version: string; copyright: string }> =>
@@ -29,11 +29,24 @@ const api = {
   getLoginStatuses: (): Promise<LoginInfo[]> => ipcRenderer.invoke(IPC.getLoginStatuses),
   showWindow: (id: string): Promise<void> => ipcRenderer.invoke(IPC.showWindow, id),
   hideWindow: (id: string): Promise<void> => ipcRenderer.invoke(IPC.hideWindow, id),
+  // 运行日志
+  getLogs: (id: string): Promise<LogEvent[]> => ipcRenderer.invoke(IPC.getLogs, id),
+  clearLogs: (id: string): Promise<void> => ipcRenderer.invoke(IPC.clearLogs, id),
+  // 自动更新
+  checkUpdate: (): Promise<void> => ipcRenderer.invoke(IPC.checkUpdate),
+  quitAndInstall: (): Promise<void> => ipcRenderer.invoke(IPC.quitAndInstall),
+  openExternal: (url: string): Promise<void> => ipcRenderer.invoke(IPC.openExternal, url),
   onStatusUpdate: (cb: (s: ProfileStatus) => void): void => {
     ipcRenderer.on(IPC.statusUpdate, (_e, s: ProfileStatus) => cb(s));
   },
   onLoginUpdate: (cb: (info: LoginInfo) => void): void => {
     ipcRenderer.on(IPC.loginUpdate, (_e, info: LoginInfo) => cb(info));
+  },
+  onLogEvent: (cb: (e: LogEvent) => void): void => {
+    ipcRenderer.on(IPC.logEvent, (_e, ev: LogEvent) => cb(ev));
+  },
+  onUpdateStatus: (cb: (s: Record<string, unknown>) => void): void => {
+    ipcRenderer.on(IPC.updateStatus, (_e, s: Record<string, unknown>) => cb(s));
   },
 };
 

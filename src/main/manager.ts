@@ -5,7 +5,8 @@ import { mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { Store } from './store';
 import { LiveController } from './controller';
-import { Profile, ProfileStatus, LoginInfo } from './types';
+import { LogStore } from './log-store';
+import { Profile, ProfileStatus, LoginInfo, LogEvent, LogType } from './types';
 import { IPC } from './ipc-channels';
 import {
   ensureWindow,
@@ -34,10 +35,29 @@ export class Manager {
   private controllers = new Map<string, LiveController>();
   private latestStatus = new Map<string, ProfileStatus>();
   private loginInfo = new Map<string, LoginInfo>();
+  private logs: LogStore;
 
   constructor(store: Store, appDataRoot: string) {
     this.store = store;
     this.appDataRoot = appDataRoot;
+    this.logs = new LogStore(appDataRoot, (e) => this.broadcastLog(e));
+  }
+
+  private broadcastLog(e: LogEvent): void {
+    for (const w of BrowserWindow.getAllWindows()) w.webContents.send(IPC.logEvent, e);
+  }
+
+  getLogs(id: string): LogEvent[] {
+    return this.logs.get(id);
+  }
+
+  clearLogs(id: string): void {
+    this.logs.clear(id);
+  }
+
+  /** 记一条运行日志（控制器/登录流程调用）。 */
+  private log(profileId: string, type: LogType, detail: string): void {
+    this.logs.append(profileId, type, detail);
   }
 
   private broadcast(s: ProfileStatus): void {
@@ -50,7 +70,12 @@ export class Manager {
   private controllerFor(profile: Profile): LiveController {
     let c = this.controllers.get(profile.id);
     if (!c) {
-      c = new LiveController(profile, this.appDataRoot, (s) => this.broadcast(s));
+      c = new LiveController(
+        profile,
+        this.appDataRoot,
+        (s) => this.broadcast(s),
+        (type, detail) => this.log(profile.id, type, detail),
+      );
       this.controllers.set(profile.id, c);
     }
     return c;
@@ -145,6 +170,7 @@ export class Manager {
           await session.page.goto(controlUrl, { waitUntil: 'domcontentloaded' }).catch(() => {});
           await this.persistLogin(profile, session);
           this.broadcastLogin({ profileId: profile.id, status: 'logged_in', lastLoginAt: profile.lastLoginAt });
+          this.log(profile.id, 'login', '扫码登录成功');
           if (qrWin) closeQrWindow(qrWin);
           if (profile.background) hideWindow(profile.id);
           return;

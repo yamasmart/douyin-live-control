@@ -12,6 +12,9 @@ export const IPC = {
   // 从中控台同步真实数据
   listGoods: 'sync:goods',
   listQuickReplies: 'sync:quickReplies',
+  // 运行日志
+  getLogs: 'log:get',
+  clearLogs: 'log:clear',
   getStatuses: 'status:getAll',
   // 登录 / Cookie 机制
   login: 'login:start',
@@ -22,4 +25,10 @@ export const IPC = {
   // 主进程 -> 渲染进程 的推送。
   statusUpdate: 'status:update',
   loginUpdate: 'login:update',
+  logEvent: 'log:event',
+  // 自动更新
+  updateStatus: 'update:status',
+  checkUpdate: 'update:check',
+  quitAndInstall: 'update:install',
+  openExternal: 'shell:openExternal',
 } as const;

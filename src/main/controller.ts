@@ -5,7 +5,7 @@
 //   - 福袋(P1)/公屏AI(P2) 各自占位循环
 //   - 定时回报状态（心跳）给界面
 
-import { Profile, ProfileStatus, RunStatus } from './types';
+import { Profile, ProfileStatus, RunStatus, LogType } from './types';
 import { ensureWindow, closeWindow, hideWindow } from './account-window';
 import { connectToAccount, CdpSession } from './cdp';
 import {
@@ -23,11 +23,13 @@ const NON_LIVE_STREAK_TO_STOP = 3;
 const DETECT_INTERVAL_MS = 12000;
 
 type StatusListener = (s: ProfileStatus) => void;
+type LogListener = (type: LogType, detail: string) => void;
 
 export class LiveController {
   private profile: Profile;
   private appDataRoot: string;
   private onStatus: StatusListener;
+  private onLog: LogListener;
 
   private session: CdpSession | null = null;
   private timers: NodeJS.Timeout[] = [];
@@ -36,10 +38,16 @@ export class LiveController {
   private nonLiveStreak = 0;
   private status: ProfileStatus;
 
-  constructor(profile: Profile, appDataRoot: string, onStatus: StatusListener) {
+  constructor(
+    profile: Profile,
+    appDataRoot: string,
+    onStatus: StatusListener,
+    onLog: LogListener,
+  ) {
     this.profile = profile;
     this.appDataRoot = appDataRoot;
     this.onStatus = onStatus;
+    this.onLog = onLog;
     this.status = {
       profileId: profile.id,
       runStatus: 'stopped',
@@ -71,16 +79,20 @@ export class LiveController {
 
       // 登录态前置校验：未登录（被重定向到登录页）不挂循环（镜像 OMS 的 buyin 登录校验）。
       if (!(await isLoggedIn(this.session.page))) {
-        await this.stop();
-        this.setStatus('error', '账号未登录巨量百应，请先点「登录」完成扫码登录后再启动');
+        await this.stop({ silent: true });
+        const msg = '账号未登录巨量百应，请先点「登录」完成扫码登录后再启动';
+        this.log('error', msg);
+        this.setStatus('error', msg);
         return;
       }
 
       // 直播态前置检测：讲解按钮只在直播进行中出现；未开播不挂循环（镜像 OMS）。
       await dismissPopups(this.session.page).catch(() => {});
       if (!(await isLive(this.session.page))) {
-        await this.stop();
-        this.setStatus('error', '未检测到直播（讲解按钮未出现），请确认该账号已开播后再启动');
+        await this.stop({ silent: true });
+        const msg = '未检测到直播（讲解按钮未出现），请确认该账号已开播后再启动';
+        this.log('error', msg);
+        this.setStatus('error', msg);
         return;
       }
 
@@ -89,15 +101,19 @@ export class LiveController {
 
       this.nonLiveStreak = 0;
       this.setStatus('running');
+      this.log('start', '启动（检测到直播中）');
       this.startLoops();
       this.startHeartbeat();
       this.startDetectLoop();
     } catch (e) {
-      this.setStatus('error', String((e as Error).message ?? e));
+      const msg = String((e as Error).message ?? e);
+      this.log('error', msg);
+      this.setStatus('error', msg);
     }
   }
 
-  async stop(): Promise<void> {
+  async stop(opts?: { silent?: boolean }): Promise<void> {
+    const wasRunning = this.status.runStatus === 'running' || this.status.runStatus === 'connecting';
     this.clearLoops();
     if (this.heartbeat) {
       clearInterval(this.heartbeat);
@@ -109,6 +125,7 @@ export class LiveController {
     }
     // 仅松开 page 引用；不关内置浏览器窗口（登录态/页面保留，方便再启动）。
     this.session = null;
+    if (!opts?.silent && wasRunning) this.log('stop', '已停止');
     this.setStatus('stopped');
   }
 
@@ -134,9 +151,10 @@ export class LiveController {
       if (!product.enabled) continue;
       const ms = Math.max(1, product.intervalSec) * 1000;
       const t = setInterval(() => {
-        this.safeRun(`product-${product.id}`, () =>
-          clickExplain(this.requirePage(), product.seq),
-        );
+        this.safeRun(`product-${product.id}`, async () => {
+          await clickExplain(this.requirePage(), product.seq);
+          this.log('explain', `弹 ${product.seq} 号${product.label ? ' · ' + product.label : ''}`);
+        });
       }, ms);
       this.timers.push(t);
     }
@@ -147,9 +165,11 @@ export class LiveController {
       const t = setInterval(() => {
         this.safeRun(`comment-${c.id}`, async () => {
           const text = (c.text?.trim() || c.presetName?.trim()) ?? '';
-          for (let i = 0; i < Math.max(1, c.batchCount); i++) {
+          const n = Math.max(1, c.batchCount);
+          for (let i = 0; i < n; i++) {
             await sendComment(this.requirePage(), text);
           }
+          this.log('comment', `发评论 ×${n}: ${text.slice(0, 24)}`);
         });
       }, ms);
       this.timers.push(t);
@@ -158,7 +178,10 @@ export class LiveController {
     const fuwu = this.profile.fuwu;
     if (fuwu?.enabled) {
       const t = setInterval(() => {
-        this.safeRun('fuwu', () => startFuwu(this.requirePage()));
+        this.safeRun('fuwu', async () => {
+          await startFuwu(this.requirePage());
+          this.log('fuwu', '发布超级福袋');
+        });
       }, Math.max(1, fuwu.intervalSec) * 1000);
       this.timers.push(t);
     }
@@ -204,7 +227,8 @@ export class LiveController {
         }
         this.nonLiveStreak += 1;
         if (this.nonLiveStreak >= NON_LIVE_STREAK_TO_STOP) {
-          await this.stop();
+          await this.stop({ silent: true });
+          this.log('offline', '检测到已下播，已自动停止');
           this.setStatus('stopped', '检测到已下播，已自动停止');
         }
       } catch {
@@ -221,8 +245,18 @@ export class LiveController {
       if (this.status.runStatus === 'running') this.status.message = undefined;
       this.emit();
     } catch (e) {
-      this.status.message = `${key}: ${(e as Error).message ?? e}`;
+      const msg = `${key}: ${(e as Error).message ?? e}`;
+      this.status.message = msg;
+      this.log('error', msg);
       this.emit();
+    }
+  }
+
+  private log(type: LogType, detail: string): void {
+    try {
+      this.onLog(type, detail);
+    } catch {
+      /* 日志失败不致命 */
     }
   }
 

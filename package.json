@@ -1,7 +1,7 @@
 {
   "name": "douyin-live-control",
   "productName": "抖音直播中控群控",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "抖音直播中控群控 — Electron 桌面应用 + 内置浏览器，对抖音巨量百应直播中控台做定时讲解/快捷评论/福袋/公屏AI回复。装上即用，无外部依赖。",
   "private": true,
   "license": "MIT",
@@ -29,6 +29,11 @@
     "directories": {
       "output": "out"
     },
+    "publish": {
+      "provider": "github",
+      "owner": "yamasmart",
+      "repo": "douyin-live-control"
+    },
     "artifactName": "${name}-${version}-${arch}.${ext}",
     "files": [
       "dist/**/*",
@@ -37,15 +42,37 @@
     "asar": true,
     "mac": {
       "target": [
-        { "target": "dmg", "arch": ["arm64", "x64"] },
-        { "target": "zip", "arch": ["arm64", "x64"] }
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
       ],
       "category": "public.app-category.business"
     },
     "win": {
       "target": [
-        { "target": "nsis", "arch": ["x64"] },
-        { "target": "portable", "arch": ["x64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
       ]
     },
     "nsis": {
@@ -63,6 +90,7 @@
     "typescript": "^5.7.0"
   },
   "dependencies": {
+    "electron-updater": "^6.8.9",
     "playwright-core": "^1.49.0"
   }
 }

@@ -7,6 +7,7 @@ import type {
   CommentPreset,
   ProfileStatus,
   LoginInfo,
+  LogEvent,
 } from '../main/types';
 
 declare global {
@@ -20,6 +21,8 @@ let config: AppConfig = { profiles: [] };
 let selectedId: string | null = null;
 const statuses = new Map<string, ProfileStatus>();
 const logins = new Map<string, LoginInfo>();
+const logsCache = new Map<string, LogEvent[]>();
+let logOpenFor: string | null = null;
 
 const uid = () => Math.random().toString(36).slice(2, 9);
 
@@ -144,6 +147,8 @@ function renderDetail(): void {
       }</span>
       <button class="primary" id="btnLogin">扫码登录</button>
       <button class="ghost" id="btnCheck">检测</button>
+      <span class="tb-sep"></span>
+      <button class="ghost" id="btnLog">运行日志</button>
     </div>
     <div class="tb-group">
       <span class="tb-label">运行控制</span>
@@ -161,6 +166,7 @@ function renderDetail(): void {
   host.appendChild(toolbar);
   toolbar.querySelector<HTMLButtonElement>('#btnLogin')!.onclick = () => lc.login(p.id);
   toolbar.querySelector<HTMLButtonElement>('#btnCheck')!.onclick = () => lc.checkLogin(p.id);
+  toolbar.querySelector<HTMLButtonElement>('#btnLog')!.onclick = () => openLog(p.id);
   toolbar.querySelector<HTMLButtonElement>('#btnStart')!.onclick = () => lc.start(p.id);
   toolbar.querySelector<HTMLButtonElement>('#btnStop')!.onclick = () => lc.stop(p.id);
   toolbar.querySelector<HTMLButtonElement>('#btnShow')!.onclick = () => lc.showWindow(p.id);
@@ -494,6 +500,114 @@ function render(): void {
   renderDetail();
 }
 
+// —— 运行日志抽屉（镜像 OMS LiveLogDrawer）——————————————————————
+const LOG_META: Record<string, { label: string; cls: string }> = {
+  start: { label: '启动', cls: 'green' },
+  stop: { label: '停止', cls: 'muted' },
+  explain: { label: '讲解', cls: 'blue' },
+  comment: { label: '评论', cls: 'gold' },
+  fuwu: { label: '福袋', cls: 'magenta' },
+  offline: { label: '下播', cls: 'orange' },
+  login: { label: '登录', cls: 'green' },
+  error: { label: '异常', cls: 'red' },
+};
+
+function fmtLogTime(ts: number): string {
+  const d = new Date(ts);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
+async function openLog(id: string): Promise<void> {
+  logOpenFor = id;
+  logsCache.set(id, await lc.getLogs(id));
+  renderLogDrawer();
+}
+
+function closeLog(): void {
+  logOpenFor = null;
+  document.getElementById('logDrawer')?.remove();
+}
+
+function renderLogDrawer(): void {
+  const existing = document.getElementById('logDrawer');
+  if (!logOpenFor) {
+    existing?.remove();
+    return;
+  }
+  const p = config.profiles.find((x) => x.id === logOpenFor);
+  const events = logsCache.get(logOpenFor) ?? [];
+  let mask = existing as HTMLElement | null;
+  if (!mask) {
+    mask = el('div');
+    mask.id = 'logDrawer';
+    mask.className = 'drawer-mask';
+    mask.onclick = (e) => {
+      if (e.target === mask) closeLog();
+    };
+    document.body.appendChild(mask);
+  }
+  const rows = events
+    .slice()
+    .reverse()
+    .map((e) => {
+      const m = LOG_META[e.type] || { label: e.type, cls: 'muted' };
+      return `<div class="log-row"><span class="log-time">${fmtLogTime(
+        e.ts,
+      )}</span><span class="log-tag ${m.cls}">${m.label}</span><span class="log-detail">${escapeHtml(
+        e.detail,
+      )}</span></div>`;
+    })
+    .join('');
+  mask.innerHTML = `<div class="drawer-panel">
+    <div class="drawer-head"><h2>运行日志 · ${escapeHtml(p?.name || '')}</h2>
+      <span class="row"><button class="small ghost" id="logClear">清空</button><button class="small" id="logClose">关闭</button></span>
+    </div>
+    <div class="log-list">${
+      events.length ? rows : '<div class="empty">暂无运行日志（启动后产生）</div>'
+    }</div>
+  </div>`;
+  document.getElementById('logClose')!.onclick = () => closeLog();
+  document.getElementById('logClear')!.onclick = async () => {
+    await lc.clearLogs(logOpenFor!);
+    logsCache.set(logOpenFor!, []);
+    renderLogDrawer();
+  };
+}
+
+// —— 自动更新提示条 ————————————————————————————————————————————
+let updateState: Record<string, any> | null = null;
+function renderUpdateBar(): void {
+  let bar = document.getElementById('updateBar');
+  const s = updateState;
+  const show = s && ['available', 'downloading', 'downloaded', 'manual'].includes(s.state as string);
+  if (!show) {
+    bar?.remove();
+    return;
+  }
+  if (!bar) {
+    bar = el('div');
+    bar.id = 'updateBar';
+    bar.className = 'update-bar';
+    document.body.appendChild(bar);
+  }
+  const st = s!.state as string;
+  let html = '';
+  if (st === 'available') html = `发现新版本 v${s!.version}，正在下载…`;
+  else if (st === 'downloading') html = `正在下载新版本… ${s!.percent || 0}%`;
+  else if (st === 'downloaded')
+    html = `新版本 v${s!.version} 已就绪 <button class="small primary" id="updInstall">重启安装</button>`;
+  else if (st === 'manual')
+    html = `发现新版本 v${s!.version} <button class="small primary" id="updOpen">前往下载</button> <button class="small ghost" id="updDismiss">稍后</button>`;
+  bar.innerHTML = html;
+  document.getElementById('updInstall')?.addEventListener('click', () => lc.quitAndInstall());
+  document.getElementById('updOpen')?.addEventListener('click', () => lc.openExternal(s!.url as string));
+  document.getElementById('updDismiss')?.addEventListener('click', () => {
+    updateState = null;
+    renderUpdateBar();
+  });
+}
+
 const HELP_STEPS: Array<[string, string]> = [
   ['1. 新建账号', '点左侧「＋ 新建账号」，填一个好认的账号名。多账号各自独立、互不影响。'],
   ['2. 登录', '点「登录」，在弹出的二维码窗口用抖音 App 扫码。登录态变绿「已登录」即成功，登录态会自动保存，下次无需重扫。'],
@@ -503,6 +617,8 @@ const HELP_STEPS: Array<[string, string]> = [
   ['6. 启动', '账号开播后点「启动」（讲解按钮只在直播进行中出现，未开播会提示）。下播后自动停止。'],
   ['7. 后台运行', '勾选「后台运行」后，启动时会隐藏该账号的浏览器窗口、只留本控制台；需要查看时点「显示窗口」。'],
   ['8. 手动操作', '每个商品行的「弹」=立即讲解该商品；每条评论的「发」=立即发送一次。'],
+  ['9. 运行日志', '点工具条「运行日志」查看该账号的启动/讲解/评论/福袋/下播/异常记录（带时间），便于核对软件实际做了什么。'],
+  ['10. 自动更新', '软件启动会自动检查新版本：Windows 会自动下载、提示「重启安装」；macOS 会提示并引导前往下载页更新。'],
 ];
 
 function toggleHelp(): void {
@@ -535,6 +651,19 @@ lc.onStatusUpdate((s) => {
 lc.onLoginUpdate((info) => {
   logins.set(info.profileId, info);
   render();
+});
+
+lc.onLogEvent((e) => {
+  const arr = logsCache.get(e.profileId) ?? [];
+  arr.push(e);
+  if (arr.length > 500) arr.splice(0, arr.length - 500);
+  logsCache.set(e.profileId, arr);
+  if (logOpenFor === e.profileId) renderLogDrawer();
+});
+
+lc.onUpdateStatus((s) => {
+  updateState = s;
+  renderUpdateBar();
 });
 
 document.getElementById('btnHelp')!.onclick = toggleHelp;
