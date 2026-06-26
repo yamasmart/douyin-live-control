@@ -37,7 +37,7 @@ jobs:
             out/*.exe
             out/*.dmg
             out/*.zip
-            out/*.yml
+            out/latest*.yml
             out/*.blockmap
           if-no-files-found: warn
 
