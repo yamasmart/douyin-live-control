@@ -1,12 +1,18 @@
 // 数据模型 —— 镜像 OMS 直播中控模块的 DB schema（LiveControlProfile / Product / Comment），
 // 但本软件落地为本地 JSON 配置，不连数据库。参考 project_live_control / project_live_control_standalone。
 
+import type { PlatformId } from './providers/types';
+
+export type { PlatformId };
+
 /** 一个直播账号档案：对应一个本机 Chrome profile（独立 user-data-dir + 调试端口）。 */
 export interface Profile {
   id: string;
-  /** 展示名，比如「LL美妆-主号」。影刀靠达人名含 LL 判品牌，这里仅展示用。 */
+  /** 展示名，比如「LL美妆-主号」。 */
   name: string;
-  /** 中控台地址，可被覆盖；默认见 selectors.ts 的 DEFAULT_CONTROL_URL。 */
+  /** 平台（抖音/小红书/拼多多/淘宝/视频号）。缺省视为 douyin（兼容旧档）。 */
+  platform?: PlatformId;
+  /** 中控台地址，可被覆盖；为空时用所属平台 provider 的默认地址。 */
   controlUrl: string;
   products: Product[];
   comments: CommentPreset[];

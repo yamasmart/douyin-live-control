@@ -55,20 +55,29 @@ npm run dist:win   # Windows：nsis(.exe) + portable(单 .exe)
 
 ```
 src/main/
-  main.ts            Electron 主进程入口 + 开自身调试端口 + IPC 注册 + 生命周期
+  main.ts            Electron 主进程入口 + 开自身调试端口 + IPC + 自动更新 + 生命周期
   manager.ts         控制器/登录管理器：持有 Store + 各账号 LiveController + 登录态广播 + 数据同步
   controller.ts      LiveController：每账号一个，内置窗口 + 每商品独立计时 + 评论节奏 + 心跳 + 下播自停
   account-window.ts  内置浏览器窗口管理：每账号一个 BrowserWindow + session 分区隔离 + 注入 __lcid
   cdp.ts             playwright-core connectOverCDP 连回自身 Chromium，按 __lcid 找账号页面
-  actions.ts         讲解/评论/福袋/读公屏/登录态/直播态/关弹窗/读商品/读快捷回复 原子操作
-  selectors.ts       中控台选择器
+  log-store.ts       运行日志：内存环形缓冲 + JSONL 持久化
+  providers/         平台插件（多平台中控台抽象）
+    types.ts         Provider 接口（讲解/评论/福袋/登录态/直播态/同步… 统一方法）
+    shared.ts        跨平台通用工具（二维码提取/登录态判定/关弹窗）
+    douyin.ts        抖音·巨量百应实现（选择器 + 各操作）
+    index.ts         provider 注册表 + 平台清单（新增平台只加文件 + 注册）
   store.ts           本地 JSON 配置持久化
-  types.ts           数据模型（Profile / Product / Comment + 登录态）
+  types.ts           数据模型（Profile<platform> / Product / Comment + 登录态 + 日志）
   ipc-channels.ts    IPC 通道名（preload/renderer/main 共享）
 src/preload/preload.ts   contextBridge 暴露受限 API
 src/renderer/            配置界面（纯 TS，无框架）
 scripts/pack-mac.mjs     本地组装 macOS .app
+scripts/make-dmg.mjs     本地打 .dmg
 ```
+
+## 多平台
+
+中控台逻辑按**平台插件**组织（`src/main/providers/`）：每个平台实现同一套 `Provider` 接口，`controller`/`manager`/界面全部平台无关。**新增一个平台** = 写一个 `providers/<平台>.ts`（实现接口 + 填该平台直播态实测的选择器）→ 在 `providers/index.ts` 注册 → 把平台清单里 `available` 改 `true`。当前：抖音·巨量百应已接入；小红书/拼多多/淘宝/视频号待直播态 spike 选择器。
 
 登录态：真正的持久 cookie 在各账号 session 分区里；另存一份 storageState 快照 `<userData>/states/<id>.json`。
 

@@ -3,10 +3,15 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { IPC } from '../main/ipc-channels';
 import type { AppConfig, Profile, ProfileStatus, LoginInfo, LogEvent } from '../main/types';
+import type { PlatformMeta } from '../main/providers/types';
 
 const api = {
-  appInfo: (): Promise<{ name: string; version: string; copyright: string }> =>
-    ipcRenderer.invoke(IPC.appInfo),
+  appInfo: (): Promise<{
+    name: string;
+    version: string;
+    copyright: string;
+    platforms: PlatformMeta[];
+  }> => ipcRenderer.invoke(IPC.appInfo),
   getConfig: (): Promise<AppConfig> => ipcRenderer.invoke(IPC.getConfig),
   getStatuses: (): Promise<ProfileStatus[]> => ipcRenderer.invoke(IPC.getStatuses),
   upsertProfile: (p: Profile): Promise<void> => ipcRenderer.invoke(IPC.upsertProfile, p),

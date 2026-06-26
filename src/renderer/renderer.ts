@@ -8,7 +8,9 @@ import type {
   ProfileStatus,
   LoginInfo,
   LogEvent,
+  PlatformId,
 } from '../main/types';
+import type { PlatformMeta } from '../main/providers/types';
 
 declare global {
   interface Window {
@@ -18,6 +20,7 @@ declare global {
 const lc = window.lc;
 
 let config: AppConfig = { profiles: [] };
+let platforms: PlatformMeta[] = [{ id: 'douyin', name: '抖音 · 巨量百应', available: true }];
 let selectedId: string | null = null;
 const statuses = new Map<string, ProfileStatus>();
 const logins = new Map<string, LoginInfo>();
@@ -30,6 +33,7 @@ function newProfile(): Profile {
   return {
     id: uid(),
     name: '新账号',
+    platform: 'douyin',
     controlUrl: '',
     products: [],
     comments: [],
@@ -38,12 +42,18 @@ function newProfile(): Profile {
   };
 }
 
+function platformName(id: PlatformId | undefined): string {
+  return platforms.find((p) => p.id === (id ?? 'douyin'))?.name ?? '抖音 · 巨量百应';
+}
+
 async function loadAppInfo(): Promise<void> {
   try {
     const info = await lc.appInfo();
+    if (info.platforms?.length) platforms = info.platforms;
     // 版权信息后面跟版本号。
     (document.getElementById('copyright') as HTMLElement).textContent =
       `${info.copyright}  ·  v${info.version}`;
+    render();
   } catch {
     // 取不到不致命，界面用 index.html 里的默认值。
   }
@@ -109,7 +119,7 @@ function renderList(): void {
     const lg = loginOf(p.id);
     item.innerHTML = `
       <div class="name"><span class="dot ${st.runStatus}"></span>${escapeHtml(p.name)}</div>
-      <div class="meta"><span>${escapeHtml(st.runStatus)}</span><span class="login ${lg.status}">${LOGIN_LABEL[lg.status]}</span></div>`;
+      <div class="meta"><span>${escapeHtml(platformName(p.platform))}</span><span class="login ${lg.status}">${LOGIN_LABEL[lg.status]}</span></div>`;
     el.appendChild(item);
   }
 }
@@ -198,10 +208,34 @@ function basicsCard(p: Profile): HTMLElement {
   const card = el('div', 'card');
   card.innerHTML = '<h3>基本信息</h3>';
   card.appendChild(field('账号名', p.name, (v) => save(p, { name: v })));
+  card.appendChild(platformField(p));
   card.appendChild(
-    field('中控台地址', p.controlUrl, (v) => save(p, { controlUrl: v }), 'https://buyin.jinritemai.com/dashboard/live/control'),
+    field(
+      '中控台地址（可选）',
+      p.controlUrl,
+      (v) => save(p, { controlUrl: v }),
+      '留空 = 用所属平台的默认地址',
+    ),
   );
   return card;
+}
+
+/** 平台下拉：未接入的平台禁选。切平台时清空自定义中控台地址，让其跟随新平台默认。 */
+function platformField(p: Profile): HTMLElement {
+  const wrap = el('div', 'field');
+  wrap.innerHTML = '<label>平台</label>';
+  const sel = document.createElement('select');
+  for (const pl of platforms) {
+    const opt = document.createElement('option');
+    opt.value = pl.id;
+    opt.textContent = pl.available ? pl.name : `${pl.name}（待接入）`;
+    opt.disabled = !pl.available;
+    if ((p.platform ?? 'douyin') === pl.id) opt.selected = true;
+    sel.appendChild(opt);
+  }
+  sel.onchange = () => save(p, { platform: sel.value as PlatformId, controlUrl: '' });
+  wrap.appendChild(sel);
+  return wrap;
 }
 
 function productsCard(p: Profile): HTMLElement {
@@ -610,7 +644,7 @@ function renderUpdateBar(): void {
 }
 
 const HELP_STEPS: Array<[string, string]> = [
-  ['1. 新建账号', '点左侧「＋ 新建账号」，填一个好认的账号名。多账号各自独立、互不影响。'],
+  ['1. 新建账号', '点左侧「＋ 新建账号」，填账号名、在「基本信息」里选平台（抖音已可用，其余平台陆续接入）。多账号各自独立、互不影响。'],
   ['2. 登录', '点「登录」，在弹出的二维码窗口用抖音 App 扫码。登录态变绿「已登录」即成功，登录态会自动保存，下次无需重扫。'],
   ['3. 定时讲解', '在「定时讲解」里加商品：序号=直播商品列表里的第几号，间隔=每隔多少秒自动点一次该商品讲解。'],
   ['4. 快捷评论', '在「快捷评论」里加话术：节奏=每隔多少秒发一轮，条数=每轮发几条。'],

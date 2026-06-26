@@ -124,10 +124,11 @@ button:disabled { opacity: 0.4; cursor: not-allowed; border-color: var(--border)
 .pill.login.logged_out, .pill.run.error { color: var(--red); border-color: rgba(239, 68, 68, 0.45); background: rgba(239, 68, 68, 0.08); }
 .pill.login.checking, .pill.run.connecting { color: var(--amber); border-color: rgba(245, 158, 11, 0.45); background: rgba(245, 158, 11, 0.08); }
 label { display: block; color: var(--muted); font-size: 11px; margin-bottom: 3px; }
-input, textarea {
+input, textarea, select {
   background: var(--bg); border: 1px solid var(--border); color: var(--text);
   border-radius: 6px; padding: 6px 8px; font-size: 12px; width: 100%;
 }
+select { cursor: pointer; }
 .field { margin-bottom: 10px; }
 .field-sm { width: 90px; flex: 0 0 auto; }
 table { width: 100%; border-collapse: collapse; }

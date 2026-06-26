@@ -9,6 +9,7 @@ import { Profile } from './types';
 import { IPC } from './ipc-channels';
 import { DEBUG_PORT, closeAllWindows } from './account-window';
 import { disconnectShared } from './cdp';
+import { PLATFORMS } from './providers';
 
 const RELEASES_URL = 'https://github.com/yamasmart/douyin-live-control/releases/latest';
 
@@ -130,6 +131,7 @@ function registerIpc(): void {
     name: APP_NAME,
     version: app.getVersion(),
     copyright: APP_COPYRIGHT,
+    platforms: PLATFORMS,
   }));
   ipcMain.handle(IPC.getConfig, () => manager.getConfig());
   ipcMain.handle(IPC.getStatuses, () => manager.getStatuses());

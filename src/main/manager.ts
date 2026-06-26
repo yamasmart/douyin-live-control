@@ -17,14 +17,8 @@ import {
   closeQrWindow,
 } from './account-window';
 import { connectToAccount, CdpSession } from './cdp';
-import {
-  isLoggedIn,
-  extractQrDataUrl,
-  needsVerify,
-  listGoods,
-  readQuickReplyPresets,
-} from './actions';
-import { DEFAULT_CONTROL_URL, LOGIN_URL } from './selectors';
+import { getProvider } from './providers';
+import { GoodsItem } from './providers/types';
 
 const LOGIN_POLL_MS = 3000;
 const LOGIN_TIMEOUT_MS = 180000;
@@ -133,22 +127,23 @@ export class Manager {
   private async runLogin(profile: Profile): Promise<void> {
     let qrWin: import('electron').BrowserWindow | null = null;
     let fellBack = false;
+    const provider = getProvider(profile.platform);
     try {
       // 隐藏的中控台窗（用户只看到二维码小窗，看不到整页）。
       const session = await this.openSession(profile, { show: false });
 
-      // 先判是否已登录（分区有 cookie / 抖音 SSO 直接进后台）；已登录就别碰登录页(带 log_out)。
-      if (await isLoggedIn(session.page)) {
+      // 先判是否已登录（分区有 cookie / SSO 直接进后台）；已登录就别碰登录页(可能带 log_out)。
+      if (await provider.isLoggedIn(session.page)) {
         await this.persistLogin(profile, session);
         this.broadcastLogin({ profileId: profile.id, status: 'logged_in', lastLoginAt: profile.lastLoginAt });
         return;
       }
 
-      // 未登录 => 导航到达人工作台登录页（二维码在此页 open.douyin qrconnect iframe）。
-      await session.page.goto(LOGIN_URL, { waitUntil: 'domcontentloaded' }).catch(() => {});
+      // 未登录 => 导航到该平台登录页（二维码通常在此页）。
+      await session.page.goto(provider.loginUrl, { waitUntil: 'domcontentloaded' }).catch(() => {});
       await session.page.waitForTimeout(1500);
 
-      const controlUrl = profile.controlUrl || DEFAULT_CONTROL_URL;
+      const controlUrl = profile.controlUrl || provider.defaultControlUrl;
       const start = Date.now();
       const deadline = start + LOGIN_TIMEOUT_MS;
       let lastQr = '';
@@ -158,15 +153,12 @@ export class Manager {
           this.broadcastLogin({ profileId: profile.id, status: 'logged_out', message: '已取消登录' });
           return;
         }
-        const url = session.page.url().toLowerCase();
-        const onLogin = ['passport', '/login', 'sso', 'account/login', 'authorize'].some((h) =>
-          url.includes(h),
-        );
-        const onBuyin = url.includes('buyin.jinritemai.com') && !onLogin;
-        const qr = await extractQrDataUrl(session.page).catch(() => '');
+        const url = session.page.url();
+        const onBackend = provider.isOnBackend(url);
+        const qr = await provider.extractQrDataUrl(session.page).catch(() => '');
 
-        if (onBuyin && !qr) {
-          // 扫码成功，已离开登录页进入 buyin 后台 => 登录成功，回到中控台备用。
+        if (onBackend && !qr) {
+          // 扫码成功，已离开登录页进入后台 => 登录成功，回到中控台备用。
           await session.page.goto(controlUrl, { waitUntil: 'domcontentloaded' }).catch(() => {});
           await this.persistLogin(profile, session);
           this.broadcastLogin({ profileId: profile.id, status: 'logged_in', lastLoginAt: profile.lastLoginAt });
@@ -177,7 +169,7 @@ export class Manager {
         }
 
         // 扫码后可能要安全验证（短信/手机号/扫脸）=> 显示真实页面让用户直接完成。
-        if (!verifyShown && (await needsVerify(session.page))) {
+        if (!verifyShown && (await provider.needsVerify(session.page))) {
           verifyShown = true;
           if (qrWin) {
             closeQrWindow(qrWin);
@@ -225,7 +217,7 @@ export class Manager {
     this.broadcastLogin({ profileId: id, status: 'checking' });
     try {
       const session = await this.openSession(profile, { show: false });
-      const ok = await isLoggedIn(session.page);
+      const ok = await getProvider(profile.platform).isLoggedIn(session.page);
       if (ok) await this.persistLogin(profile, session);
       this.broadcastLogin({
         profileId: id,
@@ -243,21 +235,23 @@ export class Manager {
 
   // —— 从中控台同步真实数据（参考 OMS goods / quick-replies 接口）——————
   /** 读中控台当前商品列表 [{seq,name}]，供界面「同步商品名」按 seq 回填备注名。需已登录。 */
-  async listGoods(id: string): Promise<Array<{ seq: number; name: string }>> {
+  async listGoods(id: string): Promise<GoodsItem[]> {
     const profile = this.store.getProfile(id);
     if (!profile) throw new Error(`profile 不存在: ${id}`);
+    const provider = getProvider(profile.platform);
     const session = await this.openSession(profile, { show: false });
-    if (!(await isLoggedIn(session.page))) throw new Error('账号未登录，请先登录再同步');
-    return listGoods(session.page);
+    if (!(await provider.isLoggedIn(session.page))) throw new Error('账号未登录，请先登录再同步');
+    return provider.listGoods(session.page);
   }
 
   /** 读中控台已配的快捷回复预设文本，供界面「同步快捷回复」逐条转成评论规则。需已登录。 */
   async listQuickReplies(id: string): Promise<string[]> {
     const profile = this.store.getProfile(id);
     if (!profile) throw new Error(`profile 不存在: ${id}`);
+    const provider = getProvider(profile.platform);
     const session = await this.openSession(profile, { show: false });
-    if (!(await isLoggedIn(session.page))) throw new Error('账号未登录，请先登录再同步');
-    return readQuickReplyPresets(session.page);
+    if (!(await provider.isLoggedIn(session.page))) throw new Error('账号未登录，请先登录再同步');
+    return provider.readQuickReplyPresets(session.page);
   }
 
   private async openSession(profile: Profile, opts: { show: boolean }): Promise<CdpSession> {

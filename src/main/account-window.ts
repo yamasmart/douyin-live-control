@@ -8,7 +8,7 @@
 import { BrowserWindow } from 'electron';
 import { join } from 'node:path';
 import { Profile } from './types';
-import { DEFAULT_CONTROL_URL } from './selectors';
+import { getProvider } from './providers';
 
 /** app 级远程调试端口（在 main.ts 启动前通过命令行开关开启），Playwright 连回自身 Chromium。 */
 export const DEBUG_PORT = 9333;
@@ -30,7 +30,7 @@ export function ensureWindow(profile: Profile, opts: { show: boolean }): Browser
     return existing;
   }
 
-  const controlUrl = profile.controlUrl || DEFAULT_CONTROL_URL;
+  const controlUrl = profile.controlUrl || getProvider(profile.platform).defaultControlUrl;
   const win = new BrowserWindow({
     width: 1280,
     height: 800,

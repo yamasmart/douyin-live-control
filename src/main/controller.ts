@@ -8,16 +8,8 @@
 import { Profile, ProfileStatus, RunStatus, LogType } from './types';
 import { ensureWindow, closeWindow, hideWindow } from './account-window';
 import { connectToAccount, CdpSession } from './cdp';
-import {
-  clickExplain,
-  sendComment,
-  startFuwu,
-  readScreenComments,
-  isLive,
-  isLoggedIn,
-  dismissPopups,
-  dismissIdleGuard,
-} from './actions';
+import { getProvider } from './providers';
+import { Provider } from './providers/types';
 
 /** 连续多少次检测到非直播态判定为下播（每 12s 一次 => 36s）。镜像 OMS。 */
 const NON_LIVE_STREAK_TO_STOP = 3;
@@ -57,6 +49,11 @@ export class LiveController {
     };
   }
 
+  /** 当前账号所属平台的能力实现。 */
+  private get provider(): Provider {
+    return getProvider(this.profile.platform);
+  }
+
   getStatus(): ProfileStatus {
     return { ...this.status, lastFired: { ...this.status.lastFired } };
   }
@@ -78,18 +75,18 @@ export class LiveController {
       ensureWindow(this.profile, { show: !this.profile.background });
       this.session = await connectToAccount(this.profile.id);
 
-      // 登录态前置校验：未登录（被重定向到登录页）不挂循环（镜像 OMS 的 buyin 登录校验）。
-      if (!(await isLoggedIn(this.session.page))) {
+      // 登录态前置校验：未登录（被重定向到登录页）不挂循环。
+      if (!(await this.provider.isLoggedIn(this.session.page))) {
         await this.stop({ silent: true });
-        const msg = '账号未登录巨量百应，请先点「登录」完成扫码登录后再启动';
+        const msg = '账号未登录，请先点「登录」完成扫码登录后再启动';
         this.log('error', msg);
         this.setStatus('error', msg);
         return;
       }
 
-      // 直播态前置检测：讲解按钮只在直播进行中出现；未开播不挂循环（镜像 OMS）。
-      await dismissPopups(this.session.page).catch(() => {});
-      if (!(await isLive(this.session.page))) {
+      // 直播态前置检测：讲解按钮只在直播进行中出现；未开播不挂循环。
+      await this.provider.dismissPopups(this.session.page).catch(() => {});
+      if (!(await this.provider.isLive(this.session.page))) {
         await this.stop({ silent: true });
         const msg = '未检测到直播（讲解按钮未出现），请确认该账号已开播后再启动';
         this.log('error', msg);
@@ -138,12 +135,12 @@ export class LiveController {
 
   // —— 手动单次操作（界面按钮）————————————————————————————————
   async manualExplain(seq: number): Promise<void> {
-    await this.safeRun(`manual-explain-${seq}`, () => clickExplain(this.requirePage(), seq));
+    await this.safeRun(`manual-explain-${seq}`, () => this.provider.clickExplain(this.requirePage(), seq));
   }
 
   async manualComment(opts: { presetName?: string; text?: string }): Promise<void> {
     const text = (opts.text?.trim() || opts.presetName?.trim()) ?? '';
-    await this.safeRun('manual-comment', () => sendComment(this.requirePage(), text));
+    await this.safeRun('manual-comment', () => this.provider.sendComment(this.requirePage(), text));
   }
 
   // —— 内部 —————————————————————————————————————————————————
@@ -153,7 +150,7 @@ export class LiveController {
       const ms = Math.max(1, product.intervalSec) * 1000;
       const t = setInterval(() => {
         this.safeRun(`product-${product.id}`, async () => {
-          await clickExplain(this.requirePage(), product.seq);
+          await this.provider.clickExplain(this.requirePage(), product.seq);
           this.log('explain', `弹 ${product.seq} 号${product.label ? ' · ' + product.label : ''}`);
         });
       }, ms);
@@ -168,7 +165,7 @@ export class LiveController {
           const text = (c.text?.trim() || c.presetName?.trim()) ?? '';
           const n = Math.max(1, c.batchCount);
           for (let i = 0; i < n; i++) {
-            await sendComment(this.requirePage(), text);
+            await this.provider.sendComment(this.requirePage(), text);
           }
           this.log('comment', `发评论 ×${n}: ${text.slice(0, 24)}`);
         });
@@ -180,7 +177,7 @@ export class LiveController {
     if (fuwu?.enabled) {
       const t = setInterval(() => {
         this.safeRun('fuwu', async () => {
-          await startFuwu(this.requirePage());
+          await this.provider.startFuwu(this.requirePage());
           this.log('fuwu', '发布超级福袋');
         });
       }, Math.max(1, fuwu.intervalSec) * 1000);
@@ -191,7 +188,7 @@ export class LiveController {
     if (ai?.enabled) {
       const t = setInterval(() => {
         this.safeRun('screen-ai', async () => {
-          const comments = await readScreenComments(this.requirePage());
+          const comments = await this.provider.readScreenComments(this.requirePage());
           // TODO(P2): 接 LLM 决策 -> sendComment 回复。当前仅占位读取。
           void comments;
         });
@@ -222,11 +219,11 @@ export class LiveController {
       if (!this.session) return;
       try {
         // 防挂机弹窗会拦截一切点击，优先解掉并记一条日志。
-        if (await dismissIdleGuard(this.session.page).catch(() => false)) {
+        if (await this.provider.dismissIdleGuard(this.session.page).catch(() => false)) {
           this.log('guard', '检测到防挂机弹窗，已自动点「恢复」');
         }
-        await dismissPopups(this.session.page).catch(() => {});
-        if (await isLive(this.session.page)) {
+        await this.provider.dismissPopups(this.session.page).catch(() => {});
+        if (await this.provider.isLive(this.session.page)) {
           this.nonLiveStreak = 0;
           return;
         }
