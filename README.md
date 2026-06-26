@@ -77,7 +77,7 @@ scripts/pack-mac.mjs     本地组装 macOS .app
 本软件采用 **[MIT License](LICENSE)**：**任何人都可以自由使用、复制、修改、分发本软件**——唯一要求是**在所有副本中保留版权声明与许可声明（不得去除版权信息）**。
 
 ```
-Copyright (c) 2026 Shane（抖音直播中控群控）
+Copyright (c) 2026 潮向未来传媒科技
 ```
 
 ## 免责声明

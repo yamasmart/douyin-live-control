@@ -1,12 +1,12 @@
 {
   "name": "douyin-live-control",
   "productName": "抖音直播中控群控",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "抖音直播中控群控 — Electron 桌面应用 + 内置浏览器，对抖音巨量百应直播中控台做定时讲解/快捷评论/福袋/公屏AI回复。装上即用，无外部依赖。",
   "private": true,
   "license": "MIT",
-  "author": "Shane",
-  "copyright": "Copyright © 2026 抖音直播中控群控. 保留所有权利。",
+  "author": "潮向未来传媒科技",
+  "copyright": "Copyright © 2026 潮向未来传媒科技. 保留所有权利。",
   "main": "dist/main/main.js",
   "scripts": {
     "build:main": "esbuild src/main/main.ts --bundle --platform=node --target=node20 --format=cjs --external:electron --external:playwright-core --outfile=dist/main/main.js --sourcemap",
@@ -25,7 +25,7 @@
   "build": {
     "appId": "com.shane.douyinlivecontrol",
     "productName": "抖音直播中控群控",
-    "copyright": "Copyright © 2026 抖音直播中控群控. 保留所有权利。",
+    "copyright": "Copyright © 2026 潮向未来传媒科技. 保留所有权利。",
     "directories": {
       "output": "out"
     },

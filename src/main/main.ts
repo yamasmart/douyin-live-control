@@ -85,7 +85,7 @@ function createWindow(): void {
 }
 
 const APP_NAME = '抖音直播中控群控';
-const APP_COPYRIGHT = 'Copyright © 2026 抖音直播中控群控. 保留所有权利。';
+const APP_COPYRIGHT = 'Copyright © 2026 潮向未来传媒科技. 保留所有权利。';
 
 function registerIpc(): void {
   ipcMain.handle(IPC.appInfo, () => ({
