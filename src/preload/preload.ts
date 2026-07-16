@@ -2,7 +2,7 @@
 
 import { contextBridge, ipcRenderer } from 'electron';
 import { IPC } from '../main/ipc-channels';
-import type { AppConfig, Profile, ProfileStatus, LoginInfo, LogEvent } from '../main/types';
+import type { AppConfig, Profile, ProfileStatus, LoginInfo, LogEvent, AiConfig } from '../main/types';
 import type { PlatformMeta } from '../main/providers/types';
 
 const api = {
@@ -28,6 +28,11 @@ const api = {
     ipcRenderer.invoke(IPC.listGoods, id),
   listQuickReplies: (id: string): Promise<string[]> =>
     ipcRenderer.invoke(IPC.listQuickReplies, id),
+  // AI 扩写（快捷评论，BYO-key）
+  getAi: (): Promise<AiConfig | undefined> => ipcRenderer.invoke(IPC.getAi),
+  setAi: (ai: AiConfig): Promise<void> => ipcRenderer.invoke(IPC.setAi, ai),
+  aiExpand: (input: { productNames: string[]; seed?: string }): Promise<string> =>
+    ipcRenderer.invoke(IPC.aiExpand, input),
   // 登录 / Cookie 机制
   login: (id: string): Promise<void> => ipcRenderer.invoke(IPC.login, id),
   checkLogin: (id: string): Promise<void> => ipcRenderer.invoke(IPC.checkLogin, id),

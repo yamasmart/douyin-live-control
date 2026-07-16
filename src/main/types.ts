@@ -92,6 +92,22 @@ export interface ProfileStatus {
 
 export interface AppConfig {
   profiles: Profile[];
+  /** AI 扩写配置（BYO-key，仅存本地）。 */
+  ai?: AiConfig;
+}
+
+/**
+ * AI 扩写（快捷评论）配置：BYO-key —— 用户自填 OpenAI 兼容端点。
+ * 本软件是分发给他人安装的桌面应用，不能内置我们自己的密钥，
+ * 故由每个用户填自己的 key，仅保存在本机 config.local.json（已 gitignore）。
+ */
+export interface AiConfig {
+  /** OpenAI 兼容接口根地址，如 https://ark.cn-beijing.volces.com/api/v3 。 */
+  baseUrl: string;
+  /** API 密钥（Bearer）。仅本地保存。 */
+  apiKey: string;
+  /** 模型 id。 */
+  model: string;
 }
 
 /** 运行日志事件类型（镜像 OMS live_control_events）。 */

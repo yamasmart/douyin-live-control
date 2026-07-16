@@ -6,7 +6,8 @@ import { join, dirname } from 'node:path';
 import { Store } from './store';
 import { LiveController } from './controller';
 import { LogStore } from './log-store';
-import { Profile, ProfileStatus, LoginInfo, LogEvent, LogType } from './types';
+import { Profile, ProfileStatus, LoginInfo, LogEvent, LogType, AiConfig } from './types';
+import { expandComment, ExpandInput } from './llm';
 import { IPC } from './ipc-channels';
 import {
   ensureWindow,
@@ -77,6 +78,20 @@ export class Manager {
 
   getConfig() {
     return this.store.getConfig();
+  }
+
+  // —— AI 扩写（BYO-key）————————————————————————————————————————
+  getAi(): AiConfig | undefined {
+    return this.store.getAi();
+  }
+
+  setAi(ai: AiConfig): void {
+    this.store.setAi(ai);
+  }
+
+  /** 据本场商品名生成/扩写一条 ≤50 字快捷评论。用当前保存的 AI 配置。 */
+  aiExpand(input: ExpandInput): Promise<string> {
+    return expandComment(this.store.getAi(), input);
   }
 
   getStatuses(): ProfileStatus[] {

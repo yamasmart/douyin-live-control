@@ -200,7 +200,13 @@ export const douyin: Provider = {
   },
 
   async readQuickReplyPresets(page) {
+    // 中控台是 SPA、内置浏览器页面长驻不会自动刷新，快捷回复下拉会停在页面打开那一刻的旧数据；
+    // 读之前先刷新拿服务端最新预设，否则百应后台改了快捷回复这里也读不到（表现为"已全部同步过"）。
+    await page.reload({ waitUntil: 'commit' }).catch(() => {});
+    await page.waitForTimeout(3000);
     const trigger = page.locator(S.quickReplyTrigger);
+    // SPA 重新渲染较慢，等「快捷回复」触发器出现再读（最多 ~8s）。
+    await trigger.first().waitFor({ state: 'visible', timeout: 8000 }).catch(() => {});
     if ((await trigger.count()) === 0) return [];
     await trigger.first().click();
     await page.waitForTimeout(300);

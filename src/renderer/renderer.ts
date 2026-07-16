@@ -9,6 +9,7 @@ import type {
   LoginInfo,
   LogEvent,
   PlatformId,
+  AiConfig,
 } from '../main/types';
 import type { PlatformMeta } from '../main/providers/types';
 
@@ -294,6 +295,8 @@ function commentsCard(p: Profile): HTMLElement {
     manualTd.appendChild(
       btn('发', 'small', () => lc.manualComment(p.id, { presetName: c.presetName, text: c.text })),
     );
+    // AI 扩写：据本场商品名生成/在草稿上扩写一条 ≤50 字评论，写回该行文本。
+    manualTd.appendChild(btn('AI', 'small sync', () => aiExpandComment(p, c)));
     tr.appendChild(manualTd);
     const delTd = document.createElement('td');
     delTd.appendChild(
@@ -383,36 +386,67 @@ async function syncGoods(p: Profile): Promise<void> {
   }
 }
 
-/** 读中控台已配的快捷回复预设，去重后逐条转成评论规则（默认未启用，确认后再勾选）。需账号已登录。 */
+/**
+ * 以中控台为准「覆盖」同步快捷回复：读百应最新预设 → 清空该账号现有快捷评论 → 按最新预设重建。
+ * 不再只增不改（旧版只 append，百应删/改过的旧话术会一直躺着继续发）。
+ * 保留同文本旧规则的启用态/节奏/条数，避免每次同步都要重新勾选调参。需账号已登录。
+ */
 async function syncReplies(p: Profile): Promise<void> {
+  // 先确认再动手：确认前不触发（拉取会刷新中控台页面，若正在直播运行会打断，故取消就不执行）。
+  const ok = confirm(
+    `「同步快捷回复」会以巨量百应中控台当前的快捷回复为准，覆盖该账号现有的 ${p.comments.length} 条快捷评论` +
+      `（含手动添加/自定义的会被清除）。同步过程会刷新一次中控台页面。是否继续？`,
+  );
+  if (!ok) return;
   try {
     const presets = await lc.listQuickReplies(p.id);
     const uniq = [...new Set(presets.map((s) => s.trim()).filter(Boolean))];
     if (!uniq.length) {
-      notify('中控台没有读到预设快捷回复', 'info');
+      notify('中控台没有读到预设快捷回复，已取消覆盖（未改动现有列表）', 'info');
       return;
     }
-    const existing = new Set(
-      p.comments.map((c) => (c.text || c.presetName || '').trim()).filter(Boolean),
+    // 旧规则按文本存档，重建时沿用启用态/节奏/条数。
+    const prev = new Map(
+      p.comments
+        .map((c) => [(c.text || c.presetName || '').trim(), c] as const)
+        .filter(([k]) => k),
     );
-    const toAdd = uniq.filter((s) => !existing.has(s));
-    if (!toAdd.length) {
-      notify('预设快捷回复已全部同步过', 'info');
-      return;
-    }
-    for (const text of toAdd) {
-      p.comments.push({
+    let kept = 0;
+    p.comments = uniq.map((text) => {
+      const old = prev.get(text);
+      if (old) kept += 1;
+      return {
         id: uid(),
         presetName: '',
         text,
-        cadenceSec: 60,
-        batchCount: 1,
-        enabled: false,
-      });
-    }
+        cadenceSec: old?.cadenceSec ?? 60,
+        batchCount: old?.batchCount ?? 1,
+        enabled: old?.enabled ?? false, // 新增的默认未启用，确认后再勾选（自动发评论有风险）
+      };
+    });
     await lc.upsertProfile(p);
     render();
-    notify(`已同步 ${toAdd.length} 条快捷回复（默认未启用，确认后再勾选）`, 'ok');
+    notify(`已按中控台覆盖为 ${uniq.length} 条快捷回复（沿用 ${kept} 条旧设置，新增默认未启用）`, 'ok');
+  } catch (e) {
+    notify(syncErr(e), 'err');
+  }
+}
+
+/** AI 扩写一条快捷评论：据本场商品名（讲解列表标签）生成/在草稿上扩写，写回该行文本。 */
+async function aiExpandComment(p: Profile, c: CommentPreset): Promise<void> {
+  const productNames = p.products.map((x) => x.label.trim()).filter(Boolean);
+  if (!productNames.length) {
+    notify('本场还没有商品名：先在「定时讲解」加商品并点「同步商品名」，AI 才知道卖什么', 'info');
+    return;
+  }
+  try {
+    notify('AI 扩写中…', 'info');
+    const text = await lc.aiExpand({ productNames, seed: c.text });
+    c.text = text;
+    c.presetName = ''; // 有了具体文本就不再走预设短语名
+    await lc.upsertProfile(p);
+    render();
+    notify('已生成：' + text, 'ok');
   } catch (e) {
     notify(syncErr(e), 'err');
   }
@@ -678,6 +712,64 @@ function toggleHelp(): void {
   document.getElementById('helpClose')!.onclick = () => mask.remove();
 }
 
+// —— 设置 · AI 扩写（BYO-key）——————————————————————————————————
+async function toggleSettings(): Promise<void> {
+  const existed = document.getElementById('settingsModal');
+  if (existed) {
+    existed.remove();
+    return;
+  }
+  const ai: AiConfig = (await lc.getAi()) ?? { baseUrl: '', apiKey: '', model: '' };
+  const mask = el('div');
+  mask.id = 'settingsModal';
+  mask.className = 'help-mask';
+  const panel = el('div', 'help-panel');
+  panel.innerHTML = `
+    <div class="help-head"><h2>设置 · AI 扩写</h2><button class="small" id="setClose">关闭</button></div>
+    <p class="hint">给「快捷评论」的 <b>AI</b> 按钮配一个大模型：据本场商品名生成/扩写一条 ≤50 字、突出卖点和福利、引导下单的短评论。用 OpenAI 兼容接口，填<b>你自己的</b>密钥——只保存在本机，不上传、不外发。常见：豆包方舟 / DeepSeek / 通义千问 兼容端点。</p>
+    <div class="field"><label>接口地址 (baseURL)</label><input id="aiBase" placeholder="如 https://ark.cn-beijing.volces.com/api/v3" /></div>
+    <div class="field"><label>API 密钥</label><input id="aiKey" type="password" placeholder="sk-..." /></div>
+    <div class="field"><label>模型</label><input id="aiModel" placeholder="如 doubao-… / deepseek-chat / qwen-plus" /></div>
+    <div class="row" style="margin-top:12px">
+      <button class="primary" id="setSave">保存</button>
+      <button class="small sync" id="setTest">测试连通</button>
+      <span id="setMsg" class="hint"></span>
+    </div>`;
+  mask.appendChild(panel);
+  mask.onclick = (e) => {
+    if (e.target === mask) mask.remove();
+  };
+  document.body.appendChild(mask);
+  const base = panel.querySelector<HTMLInputElement>('#aiBase')!;
+  const key = panel.querySelector<HTMLInputElement>('#aiKey')!;
+  const model = panel.querySelector<HTMLInputElement>('#aiModel')!;
+  base.value = ai.baseUrl;
+  key.value = ai.apiKey;
+  model.value = ai.model;
+  const setMsg = (t: string) => ((panel.querySelector('#setMsg') as HTMLElement).textContent = t);
+  const collect = (): AiConfig => ({
+    baseUrl: base.value.trim(),
+    apiKey: key.value.trim(),
+    model: model.value.trim(),
+  });
+  panel.querySelector<HTMLButtonElement>('#setClose')!.onclick = () => mask.remove();
+  panel.querySelector<HTMLButtonElement>('#setSave')!.onclick = async () => {
+    await lc.setAi(collect());
+    notify('AI 设置已保存', 'ok');
+    mask.remove();
+  };
+  panel.querySelector<HTMLButtonElement>('#setTest')!.onclick = async () => {
+    setMsg('测试中…');
+    await lc.setAi(collect()); // 先存当前填的值，再用它测一条
+    try {
+      const t = await lc.aiExpand({ productNames: ['测试商品'] });
+      setMsg('✅ 连通，样例：' + t);
+    } catch (e) {
+      setMsg('❌ ' + syncErr(e));
+    }
+  };
+}
+
 lc.onStatusUpdate((s) => {
   statuses.set(s.profileId, s);
   render();
@@ -702,6 +794,7 @@ lc.onUpdateStatus((s) => {
 });
 
 document.getElementById('btnHelp')!.onclick = toggleHelp;
+document.getElementById('btnSettings')!.onclick = () => void toggleSettings();
 
 loadAppInfo();
 refresh();

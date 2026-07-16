@@ -12,6 +12,10 @@ export const IPC = {
   // 从中控台同步真实数据
   listGoods: 'sync:goods',
   listQuickReplies: 'sync:quickReplies',
+  // AI 扩写（快捷评论，BYO-key）
+  getAi: 'ai:get',
+  setAi: 'ai:set',
+  aiExpand: 'ai:expand',
   // 运行日志
   getLogs: 'log:get',
   clearLogs: 'log:clear',

@@ -3,7 +3,7 @@
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { AppConfig, Profile } from './types';
+import { AppConfig, Profile, AiConfig } from './types';
 
 export class Store {
   private file: string;
@@ -47,6 +47,15 @@ export class Store {
 
   deleteProfile(id: string): void {
     this.config.profiles = this.config.profiles.filter((p) => p.id !== id);
+    this.persist();
+  }
+
+  getAi(): AiConfig | undefined {
+    return this.config.ai;
+  }
+
+  setAi(ai: AiConfig): void {
+    this.config.ai = ai;
     this.persist();
   }
 }
