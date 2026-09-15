@@ -7,16 +7,19 @@ import { douyin } from './douyin';
 const REGISTRY: Partial<Record<PlatformId, Provider>> = {
   douyin,
   // 待接入（各加一个 provider 文件后在此注册）：
-  // xiaohongshu, pinduoduo, taobao, shipinhao
+  // xiaohongshu, shipinhao, pinduoduo, taobao
 };
 
-/** 界面可选平台清单。available=false 表示选择器待直播态 spike，暂不可选。 */
+/**
+ * 界面可选平台清单。available=false 表示选择器待直播态 spike，暂不可选。
+ * 顺序即界面下拉顺序，按产品优先级：抖音 > 小红书 > 视频号，其后拼多多、淘宝。
+ */
 export const PLATFORMS: PlatformMeta[] = [
   { id: 'douyin', name: '抖音 · 巨量百应', available: true },
   { id: 'xiaohongshu', name: '小红书 · 千帆', available: false, note: '选择器待直播态 spike' },
+  { id: 'shipinhao', name: '视频号', available: false, note: '部分功能绑定电脑版微信，待验证' },
   { id: 'pinduoduo', name: '拼多多 · 多多直播', available: false, note: '选择器待直播态 spike' },
   { id: 'taobao', name: '淘宝直播', available: false, note: '风控强，待接入' },
-  { id: 'shipinhao', name: '视频号', available: false, note: '部分功能绑定电脑版微信，待验证' },
 ];
 
 export const DEFAULT_PLATFORM: PlatformId = 'douyin';

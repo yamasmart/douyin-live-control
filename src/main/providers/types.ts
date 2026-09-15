@@ -1,10 +1,10 @@
 // 平台 provider 抽象：把"抖音专用"的中控台逻辑抽象成统一接口，
-// 每个平台（抖音/小红书/拼多多/淘宝/视频号）实现同一套方法，
+// 每个平台（抖音/小红书/视频号/拼多多/淘宝）实现同一套方法，
 // controller / manager / UI 全部平台无关，新增平台只加一个 provider 文件。
 
 import type { Page } from 'playwright-core';
 
-export type PlatformId = 'douyin' | 'xiaohongshu' | 'pinduoduo' | 'taobao' | 'shipinhao';
+export type PlatformId = 'douyin' | 'xiaohongshu' | 'shipinhao' | 'pinduoduo' | 'taobao';
 
 export interface GoodsItem {
   seq: number;

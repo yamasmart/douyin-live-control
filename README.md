@@ -81,7 +81,7 @@ scripts/make-dmg.mjs     本地打 .dmg
 
 ## 多平台
 
-中控台逻辑按**平台插件**组织（`src/main/providers/`）：每个平台实现同一套 `Provider` 接口，`controller`/`manager`/界面全部平台无关。**新增一个平台** = 写一个 `providers/<平台>.ts`（实现接口 + 填该平台直播态实测的选择器）→ 在 `providers/index.ts` 注册 → 把平台清单里 `available` 改 `true`。当前：抖音·巨量百应已接入；小红书/拼多多/淘宝/视频号待直播态 spike 选择器。
+中控台逻辑按**平台插件**组织（`src/main/providers/`）：每个平台实现同一套 `Provider` 接口，`controller`/`manager`/界面全部平台无关。**新增一个平台** = 写一个 `providers/<平台>.ts`（实现接口 + 填该平台直播态实测的选择器）→ 在 `providers/index.ts` 注册 → 把平台清单里 `available` 改 `true`。当前：抖音·巨量百应已接入；小红书/视频号/拼多多/淘宝待直播态 spike 选择器（平台清单顺序即优先级：抖音 > 小红书 > 视频号）。
 
 登录态：真正的持久 cookie 在各账号 session 分区里；另存一份 storageState 快照 `<userData>/states/<id>.json`。
 
