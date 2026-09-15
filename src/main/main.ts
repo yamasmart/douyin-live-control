@@ -6,7 +6,7 @@ import { autoUpdater } from 'electron-updater';
 import { Store } from './store';
 import { Manager } from './manager';
 import { Profile, AiConfig } from './types';
-import { ExpandInput } from './llm';
+import { ExpandInput, AI_TASKS } from './llm';
 import { IPC } from './ipc-channels';
 import { DEBUG_PORT, closeAllWindows } from './account-window';
 import { disconnectShared } from './cdp';
@@ -133,6 +133,7 @@ function registerIpc(): void {
     version: app.getVersion(),
     copyright: APP_COPYRIGHT,
     platforms: PLATFORMS,
+    aiTasks: AI_TASKS,
   }));
   ipcMain.handle(IPC.getConfig, () => manager.getConfig());
   ipcMain.handle(IPC.exportConfig, (e, includeKey: boolean) =>

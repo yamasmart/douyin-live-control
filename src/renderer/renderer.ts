@@ -10,6 +10,8 @@ import type {
   LogEvent,
   PlatformId,
   AiConfig,
+  AiTaskConfig,
+  AiTaskMeta,
 } from '../main/types';
 import type { PlatformMeta } from '../main/providers/types';
 
@@ -22,6 +24,8 @@ const lc = window.lc;
 
 let config: AppConfig = { profiles: [] };
 let platforms: PlatformMeta[] = [{ id: 'douyin', name: '抖音 · 巨量百应', available: true }];
+/** AI 任务清单（主进程 llm.ts AI_TASKS，经 appInfo 下发）。 */
+let aiTasks: AiTaskMeta[] = [];
 let selectedId: string | null = null;
 const statuses = new Map<string, ProfileStatus>();
 const logins = new Map<string, LoginInfo>();
@@ -51,6 +55,7 @@ async function loadAppInfo(): Promise<void> {
   try {
     const info = await lc.appInfo();
     if (info.platforms?.length) platforms = info.platforms;
+    if (info.aiTasks?.length) aiTasks = info.aiTasks;
     // 版权信息后面跟版本号。
     (document.getElementById('copyright') as HTMLElement).textContent =
       `${info.copyright}  ·  v${info.version}`;
@@ -731,7 +736,7 @@ function toggleHelp(): void {
   document.getElementById('helpClose')!.onclick = () => mask.remove();
 }
 
-// —— 设置 · AI 扩写（BYO-key）——————————————————————————————————
+// —— 设置：AI 接口 + AI 任务（BYO-key）+ 配置备份——————————————————————————————————
 async function toggleSettings(): Promise<void> {
   const existed = document.getElementById('settingsModal');
   if (existed) {
@@ -745,11 +750,14 @@ async function toggleSettings(): Promise<void> {
   const panel = el('div', 'help-panel');
   panel.innerHTML = `
     <div class="help-head"><h2>设置</h2><button class="small" id="setClose">关闭</button></div>
-    <h3 class="set-title">AI 扩写</h3>
-    <p class="hint">给「快捷评论」的 <b>AI</b> 按钮配一个大模型：据本场商品名生成/扩写一条 ≤50 字、突出卖点和福利、引导下单的短评论。用 OpenAI 兼容接口，填<b>你自己的</b>密钥——只保存在本机，不上传、不外发。常见：豆包方舟 / DeepSeek / 通义千问 兼容端点。</p>
+    <h3 class="set-title">AI 接口</h3>
+    <p class="hint">所有 AI 任务共用一个 OpenAI 兼容接口，填<b>你自己的</b>密钥——只保存在本机，不上传、不外发。常见：豆包方舟 / DeepSeek / 通义千问 兼容端点。</p>
     <div class="field"><label>接口地址 (baseURL)</label><input id="aiBase" placeholder="如 https://ark.cn-beijing.volces.com/api/v3" /></div>
     <div class="field"><label>API 密钥</label><input id="aiKey" type="password" placeholder="sk-..." /></div>
-    <div class="field"><label>模型</label><input id="aiModel" placeholder="如 doubao-… / deepseek-chat / qwen-plus" /></div>
+    <div class="field"><label>默认模型（任务没单独指定模型时用它）</label><input id="aiModel" placeholder="如 doubao-… / deepseek-chat / qwen-plus" /></div>
+    <h3 class="set-title">AI 任务</h3>
+    <p class="hint">每个用到大模型的功能都是一个独立任务，可以单独换模型、改提示词。留空 = 用上面的默认模型 / 内置提示词。</p>
+    <div id="aiTasks"></div>
     <div class="row" style="margin-top:12px">
       <button class="primary" id="setSave">保存</button>
       <button class="small sync" id="setTest">测试连通</button>
@@ -773,12 +781,19 @@ async function toggleSettings(): Promise<void> {
   base.value = ai.baseUrl;
   key.value = ai.apiKey;
   model.value = ai.model;
+  const readTasks = renderAiTasks(panel.querySelector<HTMLElement>('#aiTasks')!, ai, model);
   const setMsg = (t: string) => ((panel.querySelector('#setMsg') as HTMLElement).textContent = t);
-  const collect = (): AiConfig => ({
-    baseUrl: base.value.trim(),
-    apiKey: key.value.trim(),
-    model: model.value.trim(),
-  });
+  const collect = (): AiConfig => {
+    const cfg: AiConfig = {
+      baseUrl: base.value.trim(),
+      apiKey: key.value.trim(),
+      model: model.value.trim(),
+    };
+    // 任务清单没拿到（appInfo 失败）时别把已存的任务配置冲掉。
+    const tasks = aiTasks.length ? readTasks() : ai.tasks ?? {};
+    if (Object.keys(tasks).length) cfg.tasks = tasks;
+    return cfg;
+  };
   panel.querySelector<HTMLButtonElement>('#setClose')!.onclick = () => mask.remove();
   panel.querySelector<HTMLButtonElement>('#setSave')!.onclick = async () => {
     await lc.setAi(collect());
@@ -798,6 +813,60 @@ async function toggleSettings(): Promise<void> {
   panel.querySelector<HTMLButtonElement>('#bkExport')!.onclick = () =>
     void exportBackup(panel.querySelector<HTMLInputElement>('#bkKey')!.checked);
   panel.querySelector<HTMLButtonElement>('#bkImport')!.onclick = () => void importBackup();
+}
+
+/**
+ * 设置页「AI 任务」：每个任务一张卡（名称 + 用途备注 + 单独模型 + 自定义提示词）。
+ * 返回读取当前填写的函数；与内置一致的提示词不存，内置以后升级能自动跟上。
+ */
+function renderAiTasks(
+  host: HTMLElement,
+  ai: AiConfig,
+  defaultModel: HTMLInputElement,
+): () => NonNullable<AiConfig['tasks']> {
+  const readers: Array<() => [AiTaskMeta['id'], AiTaskConfig | null]> = [];
+  for (const t of aiTasks) {
+    const own = ai.tasks?.[t.id] ?? {};
+    const card = el('div', 'ai-task');
+    card.innerHTML = `
+      <div class="ai-task-name">${escapeHtml(t.label)}</div>
+      <p class="hint">${escapeHtml(t.desc)}</p>
+      <div class="field"><label>模型</label><input data-k="model" /></div>
+      <div class="field">
+        <div class="field-head"><label>提示词</label><button class="small ghost" data-k="reset">恢复内置</button></div>
+        <textarea data-k="prompt" rows="4"></textarea>
+      </div>`;
+    const m = card.querySelector<HTMLInputElement>('[data-k="model"]')!;
+    const p = card.querySelector<HTMLTextAreaElement>('[data-k="prompt"]')!;
+    const syncPlaceholder = () => {
+      const d = defaultModel.value.trim();
+      m.placeholder = `留空 = 用默认模型${d ? `（${d}）` : ''}`;
+    };
+    syncPlaceholder();
+    defaultModel.addEventListener('input', syncPlaceholder);
+    m.value = own.model ?? '';
+    p.value = own.prompt || t.defaultPrompt; // 显示当前生效的提示词
+    card.querySelector<HTMLButtonElement>('[data-k="reset"]')!.onclick = () => {
+      p.value = t.defaultPrompt;
+    };
+    readers.push(() => {
+      const cfg: AiTaskConfig = {};
+      const model = m.value.trim();
+      const prompt = p.value.trim();
+      if (model) cfg.model = model;
+      if (prompt && prompt !== t.defaultPrompt) cfg.prompt = prompt;
+      return [t.id, Object.keys(cfg).length ? cfg : null];
+    });
+    host.appendChild(card);
+  }
+  return () => {
+    const out: NonNullable<AiConfig['tasks']> = {};
+    for (const read of readers) {
+      const [id, cfg] = read();
+      if (cfg) out[id] = cfg;
+    }
+    return out;
+  };
 }
 
 // —— 配置备份（导出 / 导入 .json）——————————————————————————————————

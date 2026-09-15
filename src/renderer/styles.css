@@ -44,6 +44,13 @@ label.inline input { width: auto; }
 /* 设置弹层分节标题 */
 .set-title { margin: 22px 0 8px; padding-top: 16px; border-top: 1px solid var(--border); font-size: 13px; }
 .help-head + .set-title { margin-top: 0; padding-top: 0; border-top: 0; }
+/* 设置 · AI 任务卡片 */
+.ai-task { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; background: var(--panel2); margin-bottom: 10px; }
+.ai-task-name { font-weight: 600; margin-bottom: 4px; }
+.ai-task .hint { margin: 0 0 10px; }
+.field-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 3px; }
+.field-head label { margin: 0; }
+textarea { resize: vertical; line-height: 1.55; font-family: inherit; }
 main { display: grid; grid-template-columns: 280px 1fr; height: calc(100vh - 49px - 28px); }
 footer {
   height: 28px; display: flex; align-items: center; justify-content: center;

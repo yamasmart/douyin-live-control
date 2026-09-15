@@ -4,8 +4,18 @@
 // 导入的是外部文件，所有字段按类型校验、数值兜底：坏值若流进 controller，
 // Math.max(1, NaN) 仍是 NaN，setInterval(fn, NaN) 会退化成毫秒级狂点。
 
-import { AppConfig, Profile, Product, CommentPreset, AiConfig, PlatformId } from './types';
+import {
+  AppConfig,
+  Profile,
+  Product,
+  CommentPreset,
+  AiConfig,
+  AiTaskConfig,
+  AiTaskId,
+  PlatformId,
+} from './types';
 import { PLATFORMS } from './providers';
+import { AI_TASKS } from './llm';
 
 const APP_ID = 'douyin-live-control';
 const KIND = 'config-backup';
@@ -28,7 +38,7 @@ export interface ParsedBackup {
   ai?: Partial<AiConfig>;
 }
 
-/** 组装导出内容。includeKey=false 时 AI 只带接口地址和模型，不带密钥。 */
+/** 组装导出内容。includeKey=false 时 AI 设置不带密钥（地址 / 模型 / 各任务配置照带）。 */
 export function buildBackup(config: AppConfig, appVersion: string, includeKey: boolean): BackupFile {
   const profiles = (JSON.parse(JSON.stringify(config.profiles)) as Profile[]).map((p) => {
     delete p.lastLoginAt;
@@ -45,9 +55,9 @@ export function buildBackup(config: AppConfig, appVersion: string, includeKey: b
     profiles,
   };
   if (config.ai) {
-    out.ai = includeKey
-      ? { ...config.ai }
-      : { baseUrl: config.ai.baseUrl, model: config.ai.model };
+    const ai = JSON.parse(JSON.stringify(config.ai)) as Partial<AiConfig>;
+    if (!includeKey) delete ai.apiKey;
+    out.ai = ai;
     out.includesApiKey = includeKey && !!config.ai.apiKey;
   }
   return out;
@@ -78,13 +88,23 @@ export function parseBackup(raw: string): ParsedBackup {
   return { profiles, ai };
 }
 
-/** 导入的 AI 设置并进本机：文件里有值的字段覆盖；文件没带密钥则保留本机已填的。 */
+/** 导入的 AI 设置并进本机：文件里有值的字段覆盖（各任务逐字段）；文件没带密钥则保留本机已填的。 */
 export function mergeAi(local: AiConfig | undefined, incoming: Partial<AiConfig>): AiConfig {
-  return {
+  const out: AiConfig = {
     baseUrl: incoming.baseUrl || local?.baseUrl || '',
     apiKey: incoming.apiKey || local?.apiKey || '',
     model: incoming.model || local?.model || '',
   };
+  const tasks: NonNullable<AiConfig['tasks']> = {};
+  for (const id of AI_TASK_IDS) {
+    const t = taskCfg(
+      incoming.tasks?.[id]?.model || local?.tasks?.[id]?.model,
+      incoming.tasks?.[id]?.prompt || local?.tasks?.[id]?.prompt,
+    );
+    if (t) tasks[id] = t;
+  }
+  if (Object.keys(tasks).length) out.tasks = tasks;
+  return out;
 }
 
 /** 北京时间 YYYYMMDD-HHmm（导出文件名用，与本机时区解耦）。 */
@@ -107,6 +127,7 @@ export function bjStamp(d = new Date()): string {
 
 // —— 字段校验 ————————————————————————————————————————————————
 const PLATFORM_IDS = new Set<string>(PLATFORMS.map((p) => p.id));
+const AI_TASK_IDS: AiTaskId[] = AI_TASKS.map((t) => t.id);
 
 function normProfile(v: unknown): Profile | null {
   if (!isObj(v)) return null;
@@ -166,7 +187,25 @@ function normAi(v: unknown): Partial<AiConfig> | undefined {
     const s = str(v[k]).trim();
     if (s) ai[k] = s;
   }
+  const rawTasks = v.tasks;
+  if (isObj(rawTasks)) {
+    const tasks: NonNullable<AiConfig['tasks']> = {};
+    for (const id of AI_TASK_IDS) {
+      const t = rawTasks[id];
+      const cfg = isObj(t) ? taskCfg(str(t.model).trim(), str(t.prompt).trim()) : null;
+      if (cfg) tasks[id] = cfg;
+    }
+    if (Object.keys(tasks).length) ai.tasks = tasks;
+  }
   return Object.keys(ai).length ? ai : undefined;
+}
+
+/** 单个 AI 任务配置：只留非空字段；全空返回 null（= 走默认模型 + 内置提示词）。 */
+function taskCfg(model?: string, prompt?: string): AiTaskConfig | null {
+  const cfg: AiTaskConfig = {};
+  if (model) cfg.model = model;
+  if (prompt) cfg.prompt = prompt;
+  return Object.keys(cfg).length ? cfg : null;
 }
 
 function isObj(v: unknown): v is Record<string, unknown> {

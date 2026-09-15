@@ -92,22 +92,45 @@ export interface ProfileStatus {
 
 export interface AppConfig {
   profiles: Profile[];
-  /** AI 扩写配置（BYO-key，仅存本地）。 */
+  /** AI 配置：共用接口 + 各任务单独配置（BYO-key，仅存本地）。 */
   ai?: AiConfig;
 }
 
 /**
- * AI 扩写（快捷评论）配置：BYO-key —— 用户自填 OpenAI 兼容端点。
+ * AI 配置：BYO-key —— 用户自填 OpenAI 兼容端点。
  * 本软件是分发给他人安装的桌面应用，不能内置我们自己的密钥，
  * 故由每个用户填自己的 key，仅保存在本机 config.local.json（已 gitignore）。
+ * 接口（地址 + 密钥 + 默认模型）所有 AI 任务共用；每个任务可单独换模型、改提示词（见 llm.ts AI_TASKS）。
  */
 export interface AiConfig {
   /** OpenAI 兼容接口根地址，如 https://ark.cn-beijing.volces.com/api/v3 。 */
   baseUrl: string;
   /** API 密钥（Bearer）。仅本地保存。 */
   apiKey: string;
-  /** 模型 id。 */
+  /** 默认模型 id：任务没单独指定模型时用它。 */
   model: string;
+  /** 各 AI 任务自己的配置；没配的任务走默认模型 + 内置提示词。 */
+  tasks?: Partial<Record<AiTaskId, AiTaskConfig>>;
+}
+
+/** 调大模型的功能白名单。新增 LLM 功能 = 这里加 id + 在 llm.ts AI_TASKS 登记。 */
+export type AiTaskId = 'comment_expand';
+
+/** 单个 AI 任务的配置：留空的字段回退到默认模型 / 内置提示词。 */
+export interface AiTaskConfig {
+  model?: string;
+  prompt?: string;
+}
+
+/** AI 任务元数据（设置页据此给每个任务一张卡）。 */
+export interface AiTaskMeta {
+  id: AiTaskId;
+  /** 卡片标题。 */
+  label: string;
+  /** 用途备注（含：吃不吃自定义提示词）。 */
+  desc: string;
+  /** 内置提示词（没填自定义时用它）。 */
+  defaultPrompt: string;
 }
 
 /** 导出配置备份的结果（取消导出时 IPC 返回 null）。 */

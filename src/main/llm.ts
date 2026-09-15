@@ -1,14 +1,30 @@
-// 快捷评论「AI 扩写」：走 OpenAI 兼容 /chat/completions 端点（BYO-key，用户自填）。
-// 据本场商品名生成一条 ≤50 字、突出卖点+福利、引导下单的口播式短评论；有草稿就在草稿上扩写。
+// 调大模型的功能统一走 OpenAI 兼容 /chat/completions 端点（BYO-key，用户自填）。
+// 每个用到大模型的功能都是 AI_TASKS 里一个独立任务：设置页可单独换模型、改提示词、看用途备注，
+// 不借用别的任务的配置；任务没单独配时回退到默认模型 + 内置提示词。
 // 无第三方 SDK，直接用 Node 内置 fetch。
 
-import { AiConfig } from './types';
+import { AiConfig, AiTaskId, AiTaskMeta } from './types';
 
-const SYSTEM_PROMPT =
+const COMMENT_EXPAND_PROMPT =
   '你是直播间氛围运营，据本场商品写一条带节奏、突出卖点和福利、引导下单的口播式短评论；' +
   '口语化、可含 0-1 个 emoji；严格不超过 50 个字；' +
   '只输出评论本身，不要引号、解释、换行、序号；' +
   '规避医疗功效、绝对化用语（最/第一/国家级等）等违禁词。';
+
+/**
+ * AI 任务登记表，设置页按此逐个露出。新增任何调大模型的功能：types.ts 的 AiTaskId 加 id，
+ * 这里登记名称 / 用途备注 / 内置提示词，调用处用 resolveTask(该 id) 取配置。
+ */
+export const AI_TASKS: AiTaskMeta[] = [
+  {
+    id: 'comment_expand',
+    label: '快捷评论 · AI 扩写',
+    desc:
+      '用途：「快捷评论」每行的 AI 按钮——据本场商品名生成一条、或在该行已有草稿上扩写一条 ≤50 字的口播式短评论。' +
+      '支持自定义提示词（留空用内置）；不论提示词怎么写，输出都会取首行并截到 50 字以内。',
+    defaultPrompt: COMMENT_EXPAND_PROMPT,
+  },
+];
 
 const REQUEST_TIMEOUT_MS = 30000;
 const MAX_CHARS = 50;
@@ -20,9 +36,23 @@ export interface ExpandInput {
   seed?: string;
 }
 
-/** 生成/扩写一条快捷评论。未配置 AI 或无商品名时抛出可读错误。 */
+/** 某任务的生效配置：任务自己的模型 / 提示词优先，没填回退默认模型 / 内置提示词。 */
+export function resolveTask(ai: AiConfig | undefined, id: AiTaskId) {
+  const meta = AI_TASKS.find((t) => t.id === id);
+  if (!meta) throw new Error(`未登记的 AI 任务：${id}`);
+  const own = ai?.tasks?.[id];
+  return {
+    baseUrl: ai?.baseUrl?.trim() ?? '',
+    apiKey: ai?.apiKey?.trim() ?? '',
+    model: own?.model?.trim() || ai?.model?.trim() || '',
+    prompt: own?.prompt?.trim() || meta.defaultPrompt,
+  };
+}
+
+/** 生成/扩写一条快捷评论（AI 任务 comment_expand）。未配置 AI 或无商品名时抛出可读错误。 */
 export async function expandComment(ai: AiConfig | undefined, input: ExpandInput): Promise<string> {
-  if (!ai?.apiKey || !ai?.baseUrl || !ai?.model) {
+  const cfg = resolveTask(ai, 'comment_expand');
+  if (!cfg.apiKey || !cfg.baseUrl || !cfg.model) {
     throw new Error('未配置 AI：请先在右上角「设置」里填写接口地址、API 密钥和模型');
   }
   const products = (input.productNames || []).map((s) => s.trim()).filter(Boolean);
@@ -34,7 +64,7 @@ export async function expandComment(ai: AiConfig | undefined, input: ExpandInput
   const seed = input.seed?.trim();
   if (seed) userLines.push(`已有草稿：${seed}`);
 
-  const url = ai.baseUrl.replace(/\/+$/, '') + '/chat/completions';
+  const url = cfg.baseUrl.replace(/\/+$/, '') + '/chat/completions';
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   let res: Response;
@@ -43,12 +73,12 @@ export async function expandComment(ai: AiConfig | undefined, input: ExpandInput
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${ai.apiKey}`,
+        Authorization: `Bearer ${cfg.apiKey}`,
       },
       body: JSON.stringify({
-        model: ai.model,
+        model: cfg.model,
         messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'system', content: cfg.prompt },
           { role: 'user', content: userLines.join('\n') },
         ],
         temperature: 0.9,

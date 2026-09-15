@@ -11,6 +11,7 @@ import type {
   AiConfig,
   BackupExportResult,
   BackupImportResult,
+  AiTaskMeta,
 } from '../main/types';
 import type { PlatformMeta } from '../main/providers/types';
 
@@ -20,6 +21,7 @@ const api = {
     version: string;
     copyright: string;
     platforms: PlatformMeta[];
+    aiTasks: AiTaskMeta[];
   }> => ipcRenderer.invoke(IPC.appInfo),
   getConfig: (): Promise<AppConfig> => ipcRenderer.invoke(IPC.getConfig),
   // 配置备份（主进程弹保存/选择/确认框；取消返回 null）

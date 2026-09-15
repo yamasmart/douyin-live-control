@@ -158,7 +158,7 @@ export class Manager {
     if (kept) lines.push(`本机其他 ${kept} 个账号保留不动`);
     if (parsed.ai) {
       lines.push(
-        parsed.ai.apiKey ? 'AI 设置（含密钥）将覆盖本机的' : 'AI 接口地址/模型将更新，本机已填的密钥保留',
+        parsed.ai.apiKey ? 'AI 设置（含密钥）将覆盖本机的' : 'AI 设置将更新（文件不含密钥，本机已填的密钥保留）',
       );
     }
     if (running.length) lines.push(`⚠️ ${names(running)} 正在运行，导入后立即按新配置执行`);
