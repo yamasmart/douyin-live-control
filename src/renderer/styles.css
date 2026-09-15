@@ -41,6 +41,9 @@ label.inline input { width: auto; }
 .help-row { padding: 9px 0; border-bottom: 1px solid var(--border); }
 .help-row b { display: block; margin-bottom: 3px; }
 .help-row span { color: var(--muted); font-size: 12px; line-height: 1.5; }
+/* 设置弹层分节标题 */
+.set-title { margin: 22px 0 8px; padding-top: 16px; border-top: 1px solid var(--border); font-size: 13px; }
+.help-head + .set-title { margin-top: 0; padding-top: 0; border-top: 0; }
 main { display: grid; grid-template-columns: 280px 1fr; height: calc(100vh - 49px - 28px); }
 footer {
   height: 28px; display: flex; align-items: center; justify-content: center;

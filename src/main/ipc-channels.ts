@@ -2,6 +2,9 @@
 export const IPC = {
   appInfo: 'app:info',
   getConfig: 'config:get',
+  // 配置备份（导出 / 导入 .json）
+  exportConfig: 'config:export',
+  importConfig: 'config:import',
   upsertProfile: 'profile:upsert',
   deleteProfile: 'profile:delete',
   start: 'control:start',

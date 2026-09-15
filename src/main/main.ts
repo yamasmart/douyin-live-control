@@ -135,6 +135,12 @@ function registerIpc(): void {
     platforms: PLATFORMS,
   }));
   ipcMain.handle(IPC.getConfig, () => manager.getConfig());
+  ipcMain.handle(IPC.exportConfig, (e, includeKey: boolean) =>
+    manager.exportConfig(BrowserWindow.fromWebContents(e.sender), includeKey === true),
+  );
+  ipcMain.handle(IPC.importConfig, (e) =>
+    manager.importConfig(BrowserWindow.fromWebContents(e.sender)),
+  );
   ipcMain.handle(IPC.getStatuses, () => manager.getStatuses());
   ipcMain.handle(IPC.getLoginStatuses, () => manager.getLoginStatuses());
   ipcMain.handle(IPC.login, (_e, id: string) => manager.login(id));

@@ -2,7 +2,16 @@
 
 import { contextBridge, ipcRenderer } from 'electron';
 import { IPC } from '../main/ipc-channels';
-import type { AppConfig, Profile, ProfileStatus, LoginInfo, LogEvent, AiConfig } from '../main/types';
+import type {
+  AppConfig,
+  Profile,
+  ProfileStatus,
+  LoginInfo,
+  LogEvent,
+  AiConfig,
+  BackupExportResult,
+  BackupImportResult,
+} from '../main/types';
 import type { PlatformMeta } from '../main/providers/types';
 
 const api = {
@@ -13,6 +22,10 @@ const api = {
     platforms: PlatformMeta[];
   }> => ipcRenderer.invoke(IPC.appInfo),
   getConfig: (): Promise<AppConfig> => ipcRenderer.invoke(IPC.getConfig),
+  // 配置备份（主进程弹保存/选择/确认框；取消返回 null）
+  exportConfig: (includeKey: boolean): Promise<BackupExportResult | null> =>
+    ipcRenderer.invoke(IPC.exportConfig, includeKey),
+  importConfig: (): Promise<BackupImportResult | null> => ipcRenderer.invoke(IPC.importConfig),
   getStatuses: (): Promise<ProfileStatus[]> => ipcRenderer.invoke(IPC.getStatuses),
   upsertProfile: (p: Profile): Promise<void> => ipcRenderer.invoke(IPC.upsertProfile, p),
   deleteProfile: (id: string): Promise<void> => ipcRenderer.invoke(IPC.deleteProfile, id),

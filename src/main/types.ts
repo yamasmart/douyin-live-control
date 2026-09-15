@@ -110,6 +110,21 @@ export interface AiConfig {
   model: string;
 }
 
+/** 导出配置备份的结果（取消导出时 IPC 返回 null）。 */
+export interface BackupExportResult {
+  file: string;
+  profiles: number;
+  includesApiKey: boolean;
+}
+
+/** 导入配置备份的结果（取消导入时 IPC 返回 null）。 */
+export interface BackupImportResult {
+  added: number;
+  updated: number;
+  /** 是否同时导入了 AI 设置。 */
+  ai: boolean;
+}
+
 /** 运行日志事件类型（镜像 OMS live_control_events）。 */
 export type LogType =
   | 'start'

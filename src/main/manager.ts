@@ -1,13 +1,24 @@
 // 控制器管理器：持有 Store 和每个 profile 的 LiveController，向界面广播状态。
 
-import { BrowserWindow } from 'electron';
-import { mkdirSync } from 'node:fs';
+import { app, BrowserWindow, dialog } from 'electron';
+import type { SaveDialogOptions, OpenDialogOptions, MessageBoxOptions } from 'electron';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { Store } from './store';
 import { LiveController } from './controller';
 import { LogStore } from './log-store';
-import { Profile, ProfileStatus, LoginInfo, LogEvent, LogType, AiConfig } from './types';
+import {
+  Profile,
+  ProfileStatus,
+  LoginInfo,
+  LogEvent,
+  LogType,
+  AiConfig,
+  BackupExportResult,
+  BackupImportResult,
+} from './types';
 import { expandComment, ExpandInput } from './llm';
+import { buildBackup, parseBackup, mergeAi, bjStamp } from './backup';
 import { IPC } from './ipc-channels';
 import {
   ensureWindow,
@@ -23,6 +34,12 @@ import { GoodsItem } from './providers/types';
 
 const LOGIN_POLL_MS = 3000;
 const LOGIN_TIMEOUT_MS = 180000;
+const BACKUP_FILTERS = [{ name: '配置备份', extensions: ['json'] }];
+
+/** 确认框里列账号名：最多 3 个，多了加「等」。 */
+function names(list: Profile[]): string {
+  return list.slice(0, 3).map((p) => `「${p.name}」`).join('、') + (list.length > 3 ? ' 等' : '');
+}
 
 export class Manager {
   private store: Store;
@@ -92,6 +109,84 @@ export class Manager {
   /** 据本场商品名生成/扩写一条 ≤50 字快捷评论。用当前保存的 AI 配置。 */
   aiExpand(input: ExpandInput): Promise<string> {
     return expandComment(this.store.getAi(), input);
+  }
+
+  // —— 配置备份（导出 / 导入 .json）————————————————————————————————
+  /** 导出全部账号配置到用户选的 .json；取消返回 null。 */
+  async exportConfig(
+    win: BrowserWindow | null,
+    includeKey: boolean,
+  ): Promise<BackupExportResult | null> {
+    const data = buildBackup(this.store.getConfig(), app.getVersion(), includeKey);
+    const opts: SaveDialogOptions = {
+      title: '导出配置备份',
+      defaultPath: join(app.getPath('desktop'), `抖音直播中控-配置备份-${bjStamp()}.json`),
+      filters: BACKUP_FILTERS,
+    };
+    const r = win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts);
+    if (r.canceled || !r.filePath) return null;
+    writeFileSync(r.filePath, JSON.stringify(data, null, 2), 'utf-8');
+    return { file: r.filePath, profiles: data.profiles.length, includesApiKey: data.includesApiKey };
+  }
+
+  /**
+   * 从 .json 导入，按账号 id 合并：同一账号覆盖、新账号新增、文件里没有的本机账号保留——只增改不删，
+   * 正在直播跑着的账号不会被删掉。先弹确认框列清楚要改什么再动手；取消返回 null。
+   */
+  async importConfig(win: BrowserWindow | null): Promise<BackupImportResult | null> {
+    const openOpts: OpenDialogOptions = {
+      title: '导入配置备份',
+      properties: ['openFile'],
+      filters: BACKUP_FILTERS,
+    };
+    const r = win ? await dialog.showOpenDialog(win, openOpts) : await dialog.showOpenDialog(openOpts);
+    if (r.canceled || !r.filePaths[0]) return null;
+    const parsed = parseBackup(readFileSync(r.filePaths[0], 'utf-8'));
+
+    const localIds = new Set(this.store.getConfig().profiles.map((p) => p.id));
+    const updated = parsed.profiles.filter((p) => localIds.has(p.id));
+    const added = parsed.profiles.length - updated.length;
+    const kept = localIds.size - updated.length;
+    const running = updated.filter((p) => {
+      const s = this.controllers.get(p.id)?.getStatus().runStatus;
+      return s === 'running' || s === 'connecting';
+    });
+
+    const lines: string[] = [];
+    if (added) lines.push(`新增 ${added} 个账号`);
+    if (updated.length) lines.push(`覆盖 ${updated.length} 个已有账号的配置：${names(updated)}`);
+    if (kept) lines.push(`本机其他 ${kept} 个账号保留不动`);
+    if (parsed.ai) {
+      lines.push(
+        parsed.ai.apiKey ? 'AI 设置（含密钥）将覆盖本机的' : 'AI 接口地址/模型将更新，本机已填的密钥保留',
+      );
+    }
+    if (running.length) lines.push(`⚠️ ${names(running)} 正在运行，导入后立即按新配置执行`);
+    if (added) lines.push('登录态不在备份里，新增的账号需要重新扫码登录');
+    const msgOpts: MessageBoxOptions = {
+      type: 'question',
+      buttons: ['导入', '取消'],
+      defaultId: 0,
+      cancelId: 1,
+      message: '确认导入配置备份？',
+      detail: lines.join('\n'),
+    };
+    const { response } = win
+      ? await dialog.showMessageBox(win, msgOpts)
+      : await dialog.showMessageBox(msgOpts);
+    if (response !== 0) return null;
+
+    for (const p of parsed.profiles) {
+      // 同一账号的 cookie 仍在本机分区里，登录态照旧有效 => 沿用本机的登录信息。
+      const cur = this.store.getProfile(p.id);
+      if (cur) {
+        p.lastLoginAt = cur.lastLoginAt;
+        p.nickname = cur.nickname;
+      }
+      this.upsertProfile(p);
+    }
+    if (parsed.ai) this.store.setAi(mergeAi(this.store.getAi(), parsed.ai));
+    return { added, updated: updated.length, ai: !!parsed.ai };
   }
 
   getStatuses(): ProfileStatus[] {

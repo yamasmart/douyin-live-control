@@ -129,6 +129,12 @@ function renderDetail(): void {
   const host = document.getElementById('detail')!;
   if (!selectedId) {
     host.innerHTML = '<div class="empty">从左侧选择或新建一个直播账号</div>';
+    // 一个账号都没有（新装 / 换电脑）：给个从备份恢复的入口。
+    if (!config.profiles.length) {
+      const b = btn('导入配置备份', 'sync', () => void importBackup());
+      b.style.marginTop = '14px';
+      host.firstElementChild!.append(document.createElement('br'), b);
+    }
     return;
   }
   const p = config.profiles.find((x) => x.id === selectedId);
@@ -688,6 +694,7 @@ const HELP_STEPS: Array<[string, string]> = [
   ['8. 手动操作', '每个商品行的「弹」=立即讲解该商品；每条评论的「发」=立即发送一次。'],
   ['9. 运行日志', '点工具条「运行日志」查看该账号的启动/讲解/评论/福袋/下播/异常记录（带时间），便于核对软件实际做了什么。'],
   ['10. 自动更新', '软件启动会自动检查新版本：Windows 会自动下载、提示「重启安装」；macOS 会提示并引导前往下载页更新。'],
+  ['11. 配置备份', '右上角「设置」→「配置备份」：导出会把所有账号的讲解/评论/福袋设置存成一个 .json 文件，换电脑或重装后导入即可恢复。登录态不在备份里，导入后需重新扫码登录。'],
 ];
 
 function toggleHelp(): void {
@@ -725,7 +732,8 @@ async function toggleSettings(): Promise<void> {
   mask.className = 'help-mask';
   const panel = el('div', 'help-panel');
   panel.innerHTML = `
-    <div class="help-head"><h2>设置 · AI 扩写</h2><button class="small" id="setClose">关闭</button></div>
+    <div class="help-head"><h2>设置</h2><button class="small" id="setClose">关闭</button></div>
+    <h3 class="set-title">AI 扩写</h3>
     <p class="hint">给「快捷评论」的 <b>AI</b> 按钮配一个大模型：据本场商品名生成/扩写一条 ≤50 字、突出卖点和福利、引导下单的短评论。用 OpenAI 兼容接口，填<b>你自己的</b>密钥——只保存在本机，不上传、不外发。常见：豆包方舟 / DeepSeek / 通义千问 兼容端点。</p>
     <div class="field"><label>接口地址 (baseURL)</label><input id="aiBase" placeholder="如 https://ark.cn-beijing.volces.com/api/v3" /></div>
     <div class="field"><label>API 密钥</label><input id="aiKey" type="password" placeholder="sk-..." /></div>
@@ -734,6 +742,13 @@ async function toggleSettings(): Promise<void> {
       <button class="primary" id="setSave">保存</button>
       <button class="small sync" id="setTest">测试连通</button>
       <span id="setMsg" class="hint"></span>
+    </div>
+    <h3 class="set-title">配置备份</h3>
+    <p class="hint">把所有账号的讲解规则、快捷评论、福袋设置导出成一个 .json 文件，换电脑或重装后「导入配置」即可恢复。导入按账号合并：同一账号覆盖，新账号新增，本机其他账号不动。<b>登录态不在备份里</b>，导入后需重新扫码登录。</p>
+    <label class="inline"><input type="checkbox" id="bkKey" /> 导出时包含 AI 密钥（文件里是明文，别外传）</label>
+    <div class="row" style="margin-top:10px">
+      <button class="sync" id="bkExport">导出配置</button>
+      <button class="sync" id="bkImport">导入配置</button>
     </div>`;
   mask.appendChild(panel);
   mask.onclick = (e) => {
@@ -768,6 +783,46 @@ async function toggleSettings(): Promise<void> {
       setMsg('❌ ' + syncErr(e));
     }
   };
+  panel.querySelector<HTMLButtonElement>('#bkExport')!.onclick = () =>
+    void exportBackup(panel.querySelector<HTMLInputElement>('#bkKey')!.checked);
+  panel.querySelector<HTMLButtonElement>('#bkImport')!.onclick = () => void importBackup();
+}
+
+// —— 配置备份（导出 / 导入 .json）——————————————————————————————————
+async function exportBackup(includeKey: boolean): Promise<void> {
+  try {
+    const r = await lc.exportConfig(includeKey);
+    if (!r) return;
+    notify(
+      `已导出 ${r.profiles} 个账号的配置${r.includesApiKey ? '（含 AI 密钥，别外传）' : ''}：${r.file}`,
+      'ok',
+    );
+  } catch (e) {
+    notify(syncErr(e), 'err');
+  }
+}
+
+async function importBackup(): Promise<void> {
+  try {
+    const r = await lc.importConfig();
+    if (!r) return;
+    document.getElementById('settingsModal')?.remove(); // AI 设置可能被导入改了，关掉免得显示旧值
+    await refresh();
+    if (!selectedId && config.profiles.length) {
+      selectedId = config.profiles[0].id;
+      render();
+    }
+    const parts: string[] = [];
+    if (r.added) parts.push(`新增 ${r.added} 个`);
+    if (r.updated) parts.push(`覆盖 ${r.updated} 个`);
+    notify(
+      `已导入${parts.length ? '：' + parts.join('、') + '账号' : ''}${r.ai ? '，AI 设置已更新' : ''}` +
+        (r.added ? '。新账号请扫码登录' : ''),
+      'ok',
+    );
+  } catch (e) {
+    notify(syncErr(e), 'err');
+  }
 }
 
 lc.onStatusUpdate((s) => {
