@@ -84,12 +84,25 @@ const LOGIN_LABEL: Record<string, string> = {
   logged_out: '未登录',
 };
 
+// 时间一律按北京时间显示，与本机时区解耦（直播在国内，日志要能对上北京时间）；存的 UTC 毫秒不动。
+const BJ_FMT = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Asia/Shanghai',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hourCycle: 'h23',
+});
+
+function bjParts(ts: number): Record<string, string> {
+  return Object.fromEntries(BJ_FMT.formatToParts(new Date(ts)).map((x) => [x.type, x.value]));
+}
+
 function fmtTime(ts?: number): string {
   if (!ts) return '';
-  const d = new Date(ts);
-  return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(
-    d.getMinutes(),
-  ).padStart(2, '0')}`;
+  const p = bjParts(ts);
+  return `${+p.month}/${+p.day} ${p.hour}:${p.minute}`;
 }
 
 function renderList(): void {
@@ -588,9 +601,8 @@ const LOG_META: Record<string, { label: string; cls: string }> = {
 };
 
 function fmtLogTime(ts: number): string {
-  const d = new Date(ts);
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  const p = bjParts(ts);
+  return `${p.month}-${p.day} ${p.hour}:${p.minute}:${p.second}`;
 }
 
 async function openLog(id: string): Promise<void> {
